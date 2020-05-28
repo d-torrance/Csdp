@@ -3,7 +3,7 @@
 
 AC_PREREQ([2.67])
 AC_INIT([CSDP], [6.2], [dimpase@gmail.com])
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([foreign])
 LT_PREREQ([2.2])
 LT_INIT([dlopen,disable-shared,no-undefined])
 AC_CONFIG_MACRO_DIR([m4])
