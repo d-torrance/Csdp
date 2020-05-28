@@ -9,7 +9,7 @@
 
   Return codes:
  
-    0             Success.
+    0             Success.  Problem solved to optimality.
     1             Success.  The problem is primal infeasibile, and we
                             have a certificate.
     2             Success.  The problem is dual infeasible, and we have 
@@ -23,7 +23,7 @@
     7             Failure: Lack of progress
     8             Failure: X, Z, or O was singular.
     9             Failure: Detected NaN or Inf values.
-   10             Failure: Improper input (see error messages.)
+   10             Failure: Stopped by QUIT, KILL, TERM, SIGXCPU signal
 
   Notes on data storage:  All "2-d" arrays are stored in Fortran style,
   column major order.  macros in index.h are used to handle indexing into
@@ -114,7 +114,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
   double relgap;
   double mu=1.0e30;
   double muplus;
-  double oldmu;
   double muk;
   double gamma;
   double alphap,alphap1;
@@ -130,10 +129,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
   double bestrelpinfeas;
   double limreldinfeas;
   double bestreldinfeas;
-  double maxrelinfeas=1.0e100;
-  double oldmaxrelinfeas=1.0e100;
-  double newpobj;
-  double newdobj;
   int iter=0;
   int m;
   int ret;
@@ -144,7 +139,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
   int retries=0;
   int retcode=0;
   double bestmeas;
-  int lastimprove=0;
   double diagnrm;
   double diagfact=0.0;
   double diagadd;
@@ -209,13 +203,13 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
    *
    */
   double newalphap;
-
+  
   /*
    * Stuff for keeping track of best solutions.
    */
 
 #define BASIZE 100
-  double bestarray[BASIZE+1];
+    double bestarray[BASIZE+1];
 
   /*
    * Used in checking whether the primal-dual affine step gives us a new
@@ -224,6 +218,13 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
   
   double affgap,affpobj,affdobj,affrelgap,affrelpinfeas,affreldinfeas;
 
+  /*
+   * Indicate the version of CSDP.
+   */
+
+  if (printlevel >= 1)
+    printf("CSDP 6.2.0\n");
+  
   /*
    * Precompute norms of a and C, so that we don't keep doing this 
    * again and again.
@@ -365,7 +366,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 
   relpinfeas=pinfeas(k,constraints,X,a,workvec1);
   bestrelpinfeas=relpinfeas;
-  reldinfeas=dinfeas(k,C,constraints,y,Z,work2);
+  reldinfeas=dinfeas(k,C,constraints,y,Z,work2,normC);
   bestreldinfeas=reldinfeas;
 
   if (relpinfeas < parameters.axtol )
@@ -373,17 +374,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 
   if (reldinfeas < parameters.atytol)
     probdfeas=1;
-
-
-  oldmaxrelinfeas=maxrelinfeas;
-  if (relpinfeas > reldinfeas)
-    {
-      maxrelinfeas=relpinfeas;
-    }
-  else
-    {
-      maxrelinfeas=reldinfeas;
-    };
 
   /*
    * Record this solution as the best solution.
@@ -421,10 +411,26 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	    * Call the user exit routine, and let the user stop the process
 	    * if he wants to.
 	    */
-	   if (user_exit(n,k,C,a,*dobj,*pobj,constant_offset,constraints,
-			 X,y,Z,parameters) == 1)
+           
+           ret=user_exit(n,k,C,a,*dobj,*pobj,constant_offset,constraints,
+			 X,y,Z,parameters);
+	   if (ret >= 1)
 	     {
-	       return(0);
+               if (ret==1)
+                 {
+                   /*
+                    * Received SIGTERM, SIGQUIT, SIGXCPU, ...
+                    */
+                   return(10);
+                 }
+               else
+                 {
+                   /*
+                    * User exit was good enough, returning success.
+                    */
+                   return(0);                   
+                 };
+
 	     }
 
 	   bestarray[iter % BASIZE]=bestmeas;
@@ -473,18 +479,18 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	       
 	       for (i=1; i<=k; i++)
 		 y[i]=0.0;
- 
+
 	       alphad=parameters.atytol/(sqrt(n*1.0)*200);
 	       make_i(work1);
 	       if (alphad*trace_prod(X,work1) > parameters.objtol)
 		 alphad=0.005*parameters.objtol/trace_prod(X,work1);
 	       zero_mat(work2);
 	       addscaledmat(work2,alphad,work1,Z);
-
+	       
 	       relpinfeas=pinfeas(k,constraints,X,a,workvec1);
 	       if (relpinfeas < bestrelpinfeas)
 		 bestrelpinfeas=relpinfeas;
-	       reldinfeas=dinfeas(k,C,constraints,y,Z,work2);
+	       reldinfeas=dinfeas(k,C,constraints,y,Z,work2,normC);
 	       if (reldinfeas < bestreldinfeas)
 		 bestreldinfeas=reldinfeas;
 
@@ -528,14 +534,15 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	       zero_mat(work2);
 	       op_a(k,constraints,work1,workvec1);
 	       alphap=parameters.atytol/(200.0*norm2(k,workvec1+1));
-	       if (alphap*trace_prod(work1,Z) > parameters.objtol)
-		 alphap=0.005*parameters.objtol/trace_prod(work1,Z);
-	       addscaledmat(work2,alphap,work1,X);
-
+	       if (alphap*trace(Z) > parameters.objtol)
+		 alphap=0.005*parameters.objtol/trace(Z);
+	       
+	       scalemat(alphap,work1,X);
+	       
 	       relpinfeas=pinfeas(k,constraints,X,a,workvec1);
 	       if (relpinfeas < bestrelpinfeas)
 		 bestrelpinfeas=relpinfeas;
-	       reldinfeas=dinfeas(k,C,constraints,y,Z,work2);
+	       reldinfeas=dinfeas(k,C,constraints,y,Z,work2,normC);
 	       if (reldinfeas < bestreldinfeas)
 		 bestreldinfeas=reldinfeas;
 
@@ -675,10 +682,10 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 
 	   for (i=1; i<=k-1; i++)
 	     for (j=i; j<=k; j++)
-	       O[ijtok(j,i,ldam)]=O[ijtok(i,j,ldam)];
+	       O[ijtok(j,i, (long int) ldam)]=O[ijtok(i,j, (long int) ldam)];
 	   
 	   for (i=1; i<=k; i++)
-	     diagO[i]=O[ijtok(i,i,ldam)];
+	     diagO[i]=O[ijtok(i,i,(long int) ldam)];
 
 	   mindiag=1.0e30;
 
@@ -735,14 +742,14 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	     printf("diagnrm is %e, adding diagadd %e \n",diagnrm,diagadd);
 
 	   for (i=1; i<=k; i++)
-	     O[ijtok(i,i,ldam)] += diagadd;
+	     O[ijtok(i,i, (long int) ldam)] += diagadd;
 
 	   /*
 	    * Scale the O matrix.
 	    */
 
 	   for (i=1; i<=k; i++)
-	     workvec8[i]=1.0/sqrt(O[ijtok(i,i,ldam)]);
+	     workvec8[i]=1.0/sqrt(O[ijtok(i,i, (long int) ldam)]);
 
 	   for (i=1; i<=k; i++)
 	     {
@@ -753,7 +760,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 #pragma omp parallel for schedule(dynamic,64) default(none) shared(O,ldam,k,workvec8) private(i,j)
 	  for (j=1; j<=k; j++)
 	     for (i=1; i<=j; i++)
-	       O[ijtok(i,j,ldam)]=O[ijtok(i,j,ldam)]*(workvec8[i]*workvec8[j]);
+	       O[ijtok(i,j, (long int) ldam)]=O[ijtok(i,j, (long int) ldam)]*(workvec8[i]*workvec8[j]);
 
 	   /*
 	     Next, compute the cholesky factorization of the system matrix.
@@ -798,9 +805,9 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 #pragma omp parallel for schedule(dynamic,64) private(i,j) shared(O,k,ldam)
 		   for (i=1; i<=k-1; i++)
 		     for (j=i; j<=k; j++)
-		       O[ijtok(i,j,ldam)]=O[ijtok(j,i,ldam)];
+		       O[ijtok(i,j, (long int) ldam)]=O[ijtok(j,i, (long int) ldam)];
 		   for (i=1; i<=k; i++)
-		     O[ijtok(i,i,ldam)]=diagO[i];
+		     O[ijtok(i,i,(long int) ldam)]=diagO[i];
 		   goto RETRYFACTOR;
 		 }
 	       else
@@ -849,16 +856,14 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	     {
 	       if (printlevel >= 3)
 		 printf("Perturbing C.\n");
-	       make_i(work3);
-	       addscaledmat(work2,-perturbfac,work3,work2);
+	       addscaledI(work2,-perturbfac);
 	     };
 
 	   if ((bestmeas < 1.0e3) && (parameters.perturbobj>0))
 	     {
 	       if (printlevel >= 3)
 		 printf("Perturbing C.\n");
-	       make_i(work3);
-	       addscaledmat(work2,-perturbfac*pow(bestmeas/1000.0,1.5),work3,work2);
+	       addscaledI(work2,-perturbfac*pow(bestmeas/1000.0,1.5));
 	     };
 
 
@@ -918,7 +923,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   /*
 	    * Do iterative refinement.
 	    */
-
 
 	   if ((iter>1) && (relerr2 > parameters.axtol) && 
 	       (parameters.fastmode==0))
@@ -990,7 +994,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	       
 	     };
 
-
+	   
 	   /*
 	    * Extract dy.
 	    */
@@ -1049,16 +1053,14 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   /*
 	     Compute dX=-X+Zi*Fd*X-temp*X;
 
-             First, put I-Zi*Fd+work1 in workn2.  Then multiply -work2*X, and
-             put the result in dX.
+             First, put I-Zi*Fd+work1 in work2.  Then multiply -work2*X, and
+             put the result in dX.  Zi*Fd is in work3.
 
 	   */
-	   make_i(work2);
-
-	   addscaledmat(work2,-1.0,work3,work2);
-
-	   addscaledmat(work2,1.0,work1,work2);
-
+	   
+	   addscaledmat(work1,-1.0,work3,work2);
+	   addscaledI(work2,1.0);
+	   
 	   scale1=-1.0;
 	   scale2=0.0;
 	   mat_mult(scale1,scale2,work2,X,dX);
@@ -1097,14 +1099,15 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 				workvec5,workvec6,mystepfrac,1.0,
 				printlevel);
 
-	   oldmu=mu;
 
+	   
 	   /* Here, work1 holds X+alphap1*dX, work2=Z+alphad1*dZ */
 
 	   addscaledmat(X,alphap1,dX,work1);
 	   addscaledmat(Z,alphad1,dZ,work2);
 	   for (i=1; i<=k; i++)
 	     workvec1[i]=y[i]+alphad1*dy[i];
+
 
 
 	   /*
@@ -1155,19 +1158,30 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	       /*
 		* run user exit to check if the affine solution is good enough
 		*/
-	       if (user_exit(n,k,C,a,affdobj,affpobj,constant_offset,constraints,
-			     work1,workvec1,work2,parameters) == 1) 
-		 {
-		   *dobj=affdobj;
-		   *pobj=affpobj;
-		   copy_mat(work1,X);
-		   copy_mat(work2,Z);
-		   for(i=1; i<=k; i++)
-		     y[i]=workvec1[i];
-		   if(printlevel>=3)
-		     printf("Affine step good enough, exiting\n");
-		   return(0);
-		 };
+               ret=user_exit(n,k,C,a,affdobj,affpobj,constant_offset,constraints,
+			     work1,workvec1,work2,parameters);
+	       if (ret >= 1)
+                 {
+                   if (ret == 1)
+                     {
+                       /*
+                        * Received SIGTERM, SIGQUIT, ...
+                        */
+                       return(10);
+                     }
+                   else
+                     {
+                       *dobj=affdobj;
+                       *pobj=affpobj;
+                       copy_mat(work1,X);
+                       copy_mat(work2,Z);
+                       for(i=1; i<=k; i++)
+                         y[i]=workvec1[i];
+                       if(printlevel>=3)
+                         printf("Affine step good enough, exiting\n");
+                       return(0);
+                     };
+                 };
 
 	       if (parameters.usexzgap==0)
 		 {
@@ -1184,7 +1198,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 		   affrelgap=affgap/(1.0+fabs(affpobj)+fabs(affdobj));
 		 };
 
-	       affreldinfeas=dinfeas(k,C,constraints,workvec1,work2,work3);
+	       affreldinfeas=dinfeas(k,C,constraints,workvec1,work2,work3,normC);
 	       affrelpinfeas=pinfeas(k,constraints,work1,a,workvec4);
 	       
 	       if (printlevel >= 3)
@@ -1200,8 +1214,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 		   (affrelpinfeas/parameters.axtol <bestmeas) &&
 		   (affreldinfeas/parameters.atytol <bestmeas))
 		 {
-		   lastimprove=iter;
-		   
 		   bestmeas=affrelgap/parameters.objtol;
 		   if (affrelpinfeas/parameters.axtol > bestmeas)
 		     bestmeas=affrelpinfeas/parameters.axtol;
@@ -1219,8 +1231,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	       if ((ispfeasprob==1) &&
 		   (affrelpinfeas/parameters.axtol < bestmeas))
 		 {
-		   lastimprove=iter;
-		   
 		   bestmeas=affrelpinfeas/parameters.axtol;
 		   
 		   store_packed(work1,bestx);
@@ -1237,8 +1247,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	       if ((isdfeasprob==1) &&
 		   (affreldinfeas/parameters.atytol <bestmeas))
 		 {
-		   lastimprove=iter;
-		   
 		   bestmeas=affreldinfeas/parameters.atytol;
 		   
 		   zero_mat(work3);
@@ -1272,6 +1280,8 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 		 };
 	     };
 
+
+	   
 	   /*
 	    * Compute muplus and prepare for the corrector step.
 	    */
@@ -1309,7 +1319,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	       if (muplus < 0.9*muk)
 		 mu=muplus;
 	       else
-		 mu=muk*0.9;
+		 mu=0.9*muk;
 	     };
 	   
 	   /*
@@ -1351,17 +1361,28 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	    * Take a moment to figure out how well we're doing on feasibility.
 	    */
 
-	   addscaledmat(X,1.0,dX,work1);
-	   op_a(k,constraints,work1,workvec1);
-	   for (i=1; i<=k; i++)
-	     workvec1[i]=workvec1[i]-a[i];
-	   relerr1=norm2(k,workvec1+1)/(1.0+norma);	   
 	   if (printlevel >= 3)
 	     {
+	       addscaledmat(X,1.0,dX,work1);
+	       op_a(k,constraints,work1,workvec1);
+	       for (i=1; i<=k; i++)
+		 workvec1[i]=workvec1[i]-a[i];
+	       relerr1=norm2(k,workvec1+1)/(1.0+norma);	   
+
+	       /*
+		* Note: the compiler may complain that relerr1 could be used
+		* uninitialized.  In fact, this is safe since all uses are
+		* protected by if (printlevel >= 3) conditions.
+		*/
+	       
 	       printf("refinement: Relative error in A(X+dX)=a (Fphat) is %e \n",
 		      relerr1);
 	     };
 
+	   
+
+	   
+	   
 	   /*
 	     Now, compute the corrector step.
 	   */
@@ -1386,11 +1407,8 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 
 	    */
 
-	   make_i(work1);
-	   scale1=0.0;
-	   scale2=mu;
-	   mat_mult(scale1,scale2,work2,work2,work1);
-
+	   make_scaled_i(work1,mu);
+	   
 	   scale1=-1.0;
 	   scale2=1.0;
 	   mat_multspa(scale1,scale2,dZ,dX,work1,fill); 
@@ -1532,13 +1550,19 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	     Compute dX1=-Zi*dZ1*X-Zi*dZ*dX+mu*zi;
 	     dX1=Zi*(-dZ1*X-dZ*dX+mu*I)
 
-	     for storage sake, dX1 is stored in work2.  
-	   */
+	     for storage sake, dX1 is stored in work2.
+  
+	      Multiply -1*dZ*dX and put the result in work1.  Then add mu*I.
+	    */
 
-	   make_i(work1);
 	   scale1=-1.0;
-	   scale2=mu;
-	   mat_multspa(scale1,scale2,dZ,dX,work1,fill); 
+	   scale2=0.0;
+	   mat_multspa(scale1,scale2,dZ,dX,work1,fill);
+	   addscaledI(work1,mu);
+
+	   /*
+	    *
+	    */
 	   scale1=-1.0;
 	   scale2=1.0;
 	   mat_multspa(scale1,scale2,work3,X,work1,fill); 
@@ -1546,13 +1570,13 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   scale2=0.0;
 	   mat_mult(scale1,scale2,Zi,work1,work2);
 	   sym_mat(work2);
-
+	   
 	   addscaledmat(X,1.0,dX,work1);
 	   op_a(k,constraints,work1,workvec1);
 	   for (i=1; i<=k; i++)
 	     workvec1[i]=workvec1[i]-a[i];
 	   relerr2=norm2(k,workvec1+1)/(1.0+norma);
-	   
+
 	   if (printlevel >= 3)
 	     {
 	       printf("refinement: Before dX+dX1 Relative error in A(X+dX)=a is %e \n",relerr2);
@@ -1580,6 +1604,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   /*
 	    * Check A(X+dX)=a.
 	    */
+
 	   addscaledmat(X,1.0,dX,work1);
 	   op_a(k,constraints,work1,workvec1);
 	   for (i=1; i<=k; i++)
@@ -1621,6 +1646,9 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	     };
 
 
+
+	   
+
 	   /* 
 	      Now, we've got the individual steps.
 	      Find maximum possible step sizes.
@@ -1629,13 +1657,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   alphap=linesearch(n,dX,work1,work2,work3,cholxinv,workvec4,
 			     workvec5,workvec6,mystepfrac,1.0,
 			     printlevel);
-
-
-	   /*
-	    * Compute the objective value of the new solution.
-	    */
-
-	   newpobj=calc_pobj(C,work1,constant_offset);
 
 	   alphad=linesearch(n,dZ,work1,work2,work3,cholzinv,workvec4,
 			     workvec5,workvec6,mystepfrac,1.0,
@@ -1649,12 +1670,8 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   for (i=1; i<=k; i++)
 	     workvec1[i]=y[i]+alphad*dy[i];
 
-	   /*
-	    * Calculate the prospective new dual objective.
-	    */
 
-	   newdobj=calc_dobj(k,a,workvec1,constant_offset);
-
+	   
 	   /*
 	    * Check on the feasibility of the new solutions.  If they're
 	    * worse, and the old solution was feasible, then don't take the
@@ -1698,6 +1715,8 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   if ((probdfeas==0) && (dinfeasmeas>1.0e4))
 	     limrelpinfeas=1.0e30;
 
+
+	   
 	   /*
 	    * Now, make sure that the step keeps us feasible enough.
 	    */
@@ -1714,7 +1733,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	       alphap=0.80*alphap;
 	       addscaledmat(X,alphap,dX,work1);
 	       newrelpinfeas=pinfeas(k,constraints,work1,a,workvec1);
-	       newpobj=calc_pobj(C,work1,constant_offset);
 	       i=i+1;
 
 	       if (i>20)
@@ -1730,9 +1748,9 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 		       diagfact=diagfact*10.0;
 		       for (i=1; i<=k-1; i++)
 			 for (j=i; j<=k; j++)
-			   O[ijtok(i,j,ldam)]=O[ijtok(j,i,ldam)];
+			   O[ijtok(i,j, (long int) ldam)]=O[ijtok(j,i, (long int) ldam)];
 		       for (i=1; i<=k; i++)
-			 O[ijtok(i,i,ldam)]=diagO[i];
+			 O[ijtok(i,i,(long int) ldam)]=diagO[i];
 		       goto RETRYFACTOR;
 		     }
 		   else
@@ -1763,7 +1781,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   for (i=1; i<=k; i++)
 	     workvec1[i]=y[i]+alphad*dy[i];
 
-	   newreldinfeas=dinfeas(k,C,constraints,workvec1,work1,work2);
+	   newreldinfeas=dinfeas(k,C,constraints,workvec1,work1,work2,normC);
 
 	   limreldinfeas=bestreldinfeas*100;
 
@@ -1803,8 +1821,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 		 workvec1[j]=y[j]+alphad*dy[j];
 	       
 	       newreldinfeas=dinfeas(k,C,constraints,workvec1,work1,
-				     work2);
-	       newdobj=calc_dobj(k,a,workvec1,constant_offset);
+				     work2,normC);
 	       i=i+1;
 	       if (i>15)
 		 {
@@ -1819,9 +1836,9 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 		       diagfact=diagfact*10.0;
 		       for (i=1; i<=k-1; i++)
 			 for (j=i; j<=k; j++)
-			   O[ijtok(i,j,ldam)]=O[ijtok(j,i,ldam)];
+			   O[ijtok(i,j,(long int) ldam)]=O[ijtok(j,i,(long int) ldam)];
 		       for (i=1; i<=k; i++)
-			 O[ijtok(i,i,ldam)]=diagO[i];
+			 O[ijtok(i,i,(long int) ldam)]=diagO[i];
 		       goto RETRYFACTOR;
 		     }
 		   else
@@ -1864,9 +1881,9 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 		   diagfact=diagfact*10.0;
 		   for (i=1; i<=k-1; i++)
 		     for (j=i; j<=k; j++)
-		       O[ijtok(i,j,ldam)]=O[ijtok(j,i,ldam)];
+		       O[ijtok(i,j,(long int) ldam)]=O[ijtok(j,i,(long int) ldam)];
 		   for (i=1; i<=k; i++)
-		     O[ijtok(i,i,ldam)]=diagO[i];
+		     O[ijtok(i,i,(long int) ldam)]=diagO[i];
 		   goto RETRYFACTOR;
 		 }
 	       else
@@ -1878,7 +1895,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 		    * Tighten up the solution as much as possible.
 		    */
 		   
-		   retcode=9;
+		   retcode=7;
 		   goto RETURNBEST;
 		   
 		 };
@@ -1889,15 +1906,13 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	    */
 
 	   addscaledmat(X,alphap,dX,work1);
-	   newpobj=calc_pobj(C,work1,constant_offset);
 	   newrelpinfeas=pinfeas(k,constraints,work1,a,workvec1);
 
 	   addscaledmat(Z,alphad,dZ,work1);
 	   for (i=1; i<=k; i++)
 	     workvec1[i]=y[i]+alphad*dy[i];
-	   newdobj=calc_dobj(k,a,workvec1,constant_offset);
 	   
-	   newreldinfeas=dinfeas(k,C,constraints,workvec1,work1,work2);
+	   newreldinfeas=dinfeas(k,C,constraints,workvec1,work1,work2,normC);
 
 	   /*
 	    * Update cholzinv.
@@ -1990,13 +2005,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	     y[i]=y[i]+alphad*dy[i];
 
 	   /*
-	    *  Update the objectives.
-	    */
-
-	   newdobj=calc_dobj(k,a,y,constant_offset);
-	   newpobj=calc_pobj(C,X,constant_offset);
-
-	   /*
 	     Recompute the objective function values.
 	   */
 
@@ -2026,23 +2034,13 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	     };
 
 	   relpinfeas=pinfeas(k,constraints,X,a,workvec1);
-	   reldinfeas=dinfeas(k,C,constraints,y,Z,work2);
+	   reldinfeas=dinfeas(k,C,constraints,y,Z,work2,normC);
 	   
 	   if (relpinfeas < parameters.axtol )
 	     probpfeas=1;
 	   
 	   if (reldinfeas < parameters.atytol)
 	     probdfeas=1;
-
-	   oldmaxrelinfeas=maxrelinfeas;
-	   if (relpinfeas > reldinfeas)
-	     {
-	       maxrelinfeas=relpinfeas;
-	     }
-	   else
-	     {
-	       maxrelinfeas=reldinfeas;
-	     };
 
 	   /*
 	    * Make sure that the objective value hasn't gone crazy.
@@ -2054,7 +2052,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 
 	   if ((gap) != (gap))
 	     {
-	       retcode=12;
+	       retcode=9;
 	       goto RETURNBEST;
 	     };
 
@@ -2065,7 +2063,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 
 	   if ((gap > 1.0e100) || (gap < -1.0e100))
 	     {
-	       retcode=12;
+	       retcode=9;
 	       goto RETURNBEST;
 	     };
 
@@ -2079,8 +2077,6 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	       (ispfeasprob==0) && (isdfeasprob==0) &&
 	       (reldinfeas/parameters.atytol <bestmeas))
 	     {
-	       lastimprove=iter;
-
 	       bestmeas=relgap/parameters.objtol;
 	       if (relpinfeas/parameters.axtol > bestmeas)
 		 bestmeas=relpinfeas/parameters.axtol;
@@ -2098,16 +2094,13 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   if ((ispfeasprob==1) &&
 	       (relpinfeas/parameters.axtol <bestmeas))
 	     {
-	       lastimprove=iter;
-
 	       bestmeas=relpinfeas/parameters.axtol;
 
 	       store_packed(X,bestx);
 	       for (i=1; i<=k; i++)
 		 besty[i]=0.0;
-	       make_i(work2);
-	       zero_mat(work3);
-	       addscaledmat(work3,0.005*parameters.objtol/trace_prod(X,work2),work2,work3);
+
+	       make_scaled_i(work3,0.005*parameters.objtol/trace_prod(X,work2));
 	       store_packed(work3,bestz);
 	       if (printlevel >= 3)
 		 printf("New best solution, %e \n",bestmeas);
@@ -2116,13 +2109,10 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
 	   if ((isdfeasprob==1) &&
 	       (reldinfeas/parameters.atytol <bestmeas))
 	     {
-	       lastimprove=iter;
-
 	       bestmeas=reldinfeas/parameters.atytol;
 
-	       zero_mat(work3);
-	       make_i(work1);
-	       addscaledmat(work3,1.0e-40,work1,work3);
+	       make_scaled_i(work3,1.0e-40);
+	       
 	       store_packed(work3,bestx);
 	       store_packed(Z,bestz);
 	       for (i=1; i<=k; i++)
@@ -2230,7 +2220,7 @@ int sdp(n,k,C,a,constant_offset,constraints,byblocks,fill,X,y,Z,cholxinv,
    */
 
   relpinfeas=pinfeas(k,constraints,X,a,workvec1);
-  reldinfeas=dinfeas(k,C,constraints,y,Z,work1);
+  reldinfeas=dinfeas(k,C,constraints,y,Z,work1,normC);
 
   if (relpinfeas < parameters.axtol )
     probpfeas=1;

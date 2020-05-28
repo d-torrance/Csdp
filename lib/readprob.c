@@ -11,9 +11,8 @@
 
 void skip_to_end_of_line();
 int get_line();
-int max_line_length();
 void countentry();
-void addentry();
+int addentry();
 
 int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
      char *fname;
@@ -43,8 +42,6 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
   double ent;
   int ret;
   struct sparseblock *p;
-  struct sparseblock *q;
-  struct sparseblock *prev;
   int *isdiag;
   double *tempdiag;
 
@@ -57,18 +54,24 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
  
   if (fid == (FILE *) NULL)
     {
-      printf("Couldn't open problem file for reading! \n");
-      exit(11);
+      if (printlevel >= 1)
+        printf("Couldn't open problem file for reading! \n");
+      exit(201);
     };
 
-  buflen=max_line_length(fid)+10;
-  fclose(fid);
+  /*
+   * This constant allows for up to 500000*20=10,000,000 byte long lines.
+   * You might see a line this long in a problem with 500000 constraints.
+   */
+  
+  buflen=8000000;
 
   buf=(char *)malloc(buflen*sizeof(char));
   if (buf == NULL)
     {
-      printf("Storage allocation failed!\n");
-      exit(10);
+      if (printlevel >= 1)
+        printf("Storage allocation failed!\n");
+      exit(205);
     };
 
   /*
@@ -80,8 +83,9 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
  
   if (fid == (FILE *) NULL)
     {
-      printf("Couldn't open problem file for reading! \n");
-      exit(11);
+      if (printlevel >= 1)
+        printf("Couldn't open problem file for reading! \n");
+      exit(201);
     };
 
   /*
@@ -107,31 +111,19 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
       ret=sscanf(buf,"%d",pk);
       if ((ret!=1) || (*pk<=0))
 	{
-	  printf("Incorrect SDPA file.  Couldn't read mDIM\n");
+          if (printlevel >= 1)
+            printf("Incorrect SDPA file.  Couldn't read mDIM\n");
 	  fclose(fid);
 	  return(1);
 	};
     }
   else
     {
-      printf("Incorect SDPA file. Couldn't read mDIM \n");
+      if (printlevel >= 1)
+        printf("Incorect SDPA file. Couldn't read mDIM \n");
       fclose(fid);
       return(1);
     };
-
-#ifndef NOSHORTS
-  /*
-   * If we're using unsigned shorts, make sure that the problem isn't
-   * too big.
-   */
-
-  if (*pk >= USHRT_MAX)
-    {
-      printf("This problem is too large to be solved by this version of the code!\n");
-      printf("Recompile without -DUSERSHORTINDS to fix the problem.\n");
-      exit(10);
-    };
-#endif
 
 #ifndef BIT64
   /*
@@ -143,10 +135,12 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 
   if (*pk > 23169)
     {
-      printf("This problem is too large to be solved in 32 bit mode!\n");
-      exit(10);
+      if (printlevel >= 1)
+        printf("This problem is too large to be solved in 32 bit mode!\n");
+      exit(206);
     };
 #endif
+
   /*
    * Read in the number of blocks.
    */
@@ -156,14 +150,16 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
       ret=sscanf(buf,"%d",&nblocks);
       if ((ret != 1) || (nblocks <= 0))
 	{
-	  printf("Incorect SDPA file. Couldn't read nBLOCKS. \n");
+          if (printlevel >= 1)
+            printf("Incorect SDPA file. Couldn't read nBLOCKS. \n");
 	  fclose(fid);
 	  return(1);
 	};
     }
   else
     {
-      printf("Incorect SDPA file. Couldn't read nBLOCKS. \n");
+      if (printlevel >= 1)
+        printf("Incorect SDPA file. Couldn't read nBLOCKS. \n");
       fclose(fid);
       return(1);
     };
@@ -176,20 +172,6 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
   for (i=1; i<=nblocks; i++)
     isdiag[i]=1;
 
-#ifndef NOSHORTS
-  /*
-   * If we're using unsigned shorts, make sure that the problem isn't
-   * too big.
-   */
-
-  if (nblocks >= USHRT_MAX)
-    {
-      printf("This problem is too large to be solved by this version of the code!\n");
-      printf("Recompile with -DNOSHORTS to fix the problem.\n");
-      exit(10);
-    };
-#endif
-
   /*
    * Allocate space for the C matrix.
    */
@@ -198,8 +180,9 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
   pC->blocks=(struct blockrec *)malloc((nblocks+1)*sizeof(struct blockrec));
   if (pC->blocks == NULL)
     {
-      printf("Storage allocation failed!\n");
-      exit(10);
+      if (printlevel >= 1)
+        printf("Storage allocation failed!\n");
+      exit(205);
     }
 
   /*
@@ -210,8 +193,9 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 
   if (myconstraints == NULL)
     {
-      printf("Storage allocation failed!\n");
-      exit(10);
+      if (printlevel >= 1)
+        printf("Storage allocation failed!\n");
+      exit(205);
     };
   
   /*
@@ -226,8 +210,9 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 
   if (*pa == NULL)
     {
-      printf("Storage allocation failed!\n");
-      exit(10);
+      if (printlevel >= 1)
+        printf("Storage allocation failed!\n");
+      exit(205);
     };
 
   /*
@@ -249,20 +234,6 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 	  blksz=strtol(ptr1,&ptr2,10);
 	  ptr1=ptr2;
 
-#ifndef NOSHORTS
-  /*
-   * If we're using unsigned shorts, make sure that the problem isn't
-   * too big.
-   */
-
-	  if (abs(blksz) >= USHRT_MAX)
-	    {
-	      printf("This problem is too large to be solved by this version of the code!\n");
-	      printf("Recompile with -DNOSHORTS to fix the problem.\n");
-	      exit(10);
-	    };
-#endif
-
 	  /*
 	   * negative numbers are used to indicate diagonal blocks.  First,
 	   * update n.
@@ -283,8 +254,9 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 	      pC->blocks[blk].data.vec=(double *)malloc((1+abs(blksz))*sizeof(double));
 	      if (pC->blocks[blk].data.vec == NULL)
 		{
-		  printf("Storage allocation failed!\n");
-		  exit(10);
+                  if (printlevel >= 1)
+                    printf("Storage allocation failed!\n");
+		  exit(205);
 		};
 	      for (i=1; i<=abs(blksz); i++)
 		pC->blocks[blk].data.vec[i]=0.0;
@@ -293,15 +265,29 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 	  else
 	    {
 	      /*
-	       * It's a matrix block.
-	       */
+	       * It's a matrix block.  In the I32LP64 model, we can't do array 
+               * indexing for huge blocks using 32 bit integers.  46340 is 
+               * the largest sized block that we can handle.  Trying to 
+               * malloc a larger block could cause integer overflow and
+               * result in a negative malloc size.
+b	       */
+              if (blksz > 46340)
+                {
+                  printf("This problem is too large to be solved in I32LP64 mode.\n");
+                  exit(206);
+                  
+                };
+              /*
+               * Setup the block in C.
+               */
 	      pC->blocks[blk].blocksize=abs(blksz);
 	      pC->blocks[blk].blockcategory=MATRIX;
 	      pC->blocks[blk].data.mat=(double *)malloc((blksz*blksz)*sizeof(double));
 	      if (pC->blocks[blk].data.mat == NULL)
 		{
-		  printf("Storage allocation failed!\n");
-		  exit(10);
+                  if (printlevel >= 1)
+                    printf("Storage allocation failed!\n");
+		  exit(205);
 		};
 
 	      for (j=1; j<=blksz; j++)
@@ -315,7 +301,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
     }
   else
     {
-      printf("Incorect SDPA file. Couldn't read block sizes.\n");
+      if (printlevel >= 1)
+        printf("Incorect SDPA file. Couldn't read block sizes.\n");
       fclose(fid);
       free(isdiag);
       return(1);
@@ -342,7 +329,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 	   */
 	  if (ptr1==ptr2)
 	    {
-	      printf("Incorect SDPA file. Can't read RHS values.\n");
+              if (printlevel >= 1)
+                printf("Incorect SDPA file. Can't read RHS values.\n");
 	      fclose(fid);
 	      free(isdiag);
 	      return(1);
@@ -352,7 +340,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
     }
   else
     {
-      printf("Incorect SDPA file. Can't read values.\n");
+      if (printlevel >= 1)
+        printf("Incorect SDPA file. Can't read values.\n");
       fclose(fid);
       free(isdiag);
       return(1);
@@ -367,7 +356,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 
   if (ret != 5)
     {
-      printf("Incorect SDPA file. Return code from fscanf is %d, should be 5\n",ret);
+      if (printlevel >= 1)
+        printf("Incorect SDPA file. Return code from fscanf is %d, should be 5\n",ret);
       fclose(fid);
       free(isdiag);
       return(1);
@@ -384,8 +374,9 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 	(indexi < 1) || (indexi > pC->blocks[blkno].blocksize) ||
 	(indexj < 1) || (indexj > pC->blocks[blkno].blocksize))
       {
-	printf("Incorect SDPA file. Bad values in line: %d %d %d %d %e \n",
-	       matno,blkno,indexi,indexj,ent);
+        if (printlevel >= 1)
+          printf("Incorect SDPA file. Bad values in line: %d %d %d %d %e \n",
+                 matno,blkno,indexi,indexj,ent);
 	fclose(fid);
 	free(isdiag);
 	return(1);
@@ -407,7 +398,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 
   if ((ret != EOF) && (ret != 0))
     {
-      printf("Incorrect SDPA file, while reading entries.  ret=%d \n",ret);
+      if (printlevel >= 1)
+        printf("Incorrect SDPA file, while reading entries.  ret=%d \n",ret);
       fclose(fid);
       free(isdiag);
       return(1);
@@ -431,30 +423,27 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 	  p->entries=(double *)malloc((p->numentries+1)*sizeof(double));
           if (p->entries == NULL)
 	    {
-	      printf("Storage allocation failed!\n");
-	      exit(10);
+              if (printlevel >= 1)
+                printf("Storage allocation failed!\n");
+	      exit(205);
 	    };
 
-#ifdef NOSHORTS
 	  p->iindices=(int *)malloc((p->numentries+1)*sizeof(int));
-#else
-	  p->iindices=(unsigned short *)malloc((p->numentries+1)*sizeof(unsigned short));
-#endif
+
           if (p->iindices == NULL)
 	    {
-	      printf("Storage allocation failed!\n");
-	      exit(10);
+              if (printlevel >= 1)
+                printf("Storage allocation failed!\n");
+	      exit(205);
 	    };
 
-#ifdef NOSHORTS
 	  p->jindices=(int *)malloc((p->numentries+1)*sizeof(int));
-#else
-	  p->jindices=(unsigned short *)malloc((p->numentries+1)*sizeof(unsigned short));
-#endif
+
           if (p->jindices == NULL)
 	    {
-	      printf("Storage allocation failed!\n");
-	      exit(10);
+              if (printlevel >= 1)
+                printf("Storage allocation failed!\n");
+	      exit(205);
 	    };
 
 	  p->numentries=0;
@@ -478,8 +467,9 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
  
   if (fid == (FILE *) NULL)
     {
-      printf("Couldn't open problem file for reading! \n");
-      exit(11);
+      if (printlevel >= 1)
+        printf("Couldn't open problem file for reading! \n");
+      exit(201);
     };
 
   /*
@@ -506,7 +496,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
     }
   else
     {
-      printf("Incorect SDPA file. Couldn't read mDIM \n");
+      if (printlevel >= 1)
+        printf("Incorect SDPA file. Couldn't read mDIM \n");
       fclose(fid);
       free(isdiag);
       return(1);
@@ -522,7 +513,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
     }
   else
     {
-      printf("Incorect SDPA file. Couldn't read nBLOCKS. \n");
+      if (printlevel >= 1)
+        printf("Incorect SDPA file. Couldn't read nBLOCKS. \n");
       fclose(fid);
       free(isdiag);
       return(1);
@@ -535,7 +527,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
   ret=get_line(fid,buf,buflen);
   if (ret != 0)
     {
-      printf("Incorect SDPA file. Couldn't read block sizes.\n");
+      if (printlevel >= 1)
+        printf("Incorect SDPA file. Couldn't read block sizes.\n");
       fclose(fid);
       free(isdiag);
       return(1);
@@ -562,7 +555,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 	   */
 	  if (ptr1==ptr2)
 	    {
-	      printf("Incorect SDPA file. Can't read RHS values.\n");
+              if (printlevel >= 1)
+                printf("Incorect SDPA file. Can't read RHS values.\n");
 	      fclose(fid);
 	      free(isdiag);
 	      return(1);
@@ -572,7 +566,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
     }
   else
     {
-      printf("Incorect SDPA file. Can't read a values.\n");
+      if (printlevel >= 1)
+        printf("Incorect SDPA file. Can't read a values.\n");
       fclose(fid);
       free(isdiag);
       return(1);
@@ -597,7 +592,25 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
     if (matno != 0)
       {
 	if (ent != 0.0)
-	  addentry(myconstraints,matno,blkno,indexi,indexj,ent);
+          {
+	  ret=addentry(myconstraints,matno,blkno,indexi,indexj,ent);
+        
+          if (ret != 0)
+            {
+              if (printlevel >= 1)
+                {
+                  printf("Incorrect SDPA file. Duplicate entry.\n");
+                  printf("matno=%d\n",matno);
+                  printf("blkno=%d\n",blkno);
+                  printf("indexi=%d\n",indexi);
+                  printf("indexj=%d\n",indexj);
+                };
+              
+              fclose(fid);
+              free(isdiag);
+              return(1);
+            };
+          };
       }
     else
       {
@@ -609,12 +622,52 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 	    blksz=pC->blocks[blkno].blocksize;
 	    if (pC->blocks[blkno].blockcategory == DIAG)
 	      {
-		pC->blocks[blkno].data.vec[indexi]=ent;
+                if (pC->blocks[blkno].data.vec[indexi] != 0.0)
+                  {
+                    /*
+                     * We've got a duplicate entry in C!
+                     */
+                    if (printlevel >= 1)
+                      {
+                        printf("Incorrect SDPA file. Duplicate entry.\n");
+                        printf("matno=%d\n",matno);
+                        printf("blkno=%d\n",blkno);
+                        printf("indexi=%d\n",indexi);
+                        printf("indexj=%d\n",indexj);
+                      };
+
+                    fclose(fid);
+                    free(isdiag);
+                    return(1);
+                  }
+                else
+                  pC->blocks[blkno].data.vec[indexi]=ent;
 	      }
 	    else
 	      {
-		pC->blocks[blkno].data.mat[ijtok(indexi,indexj,blksz)]=ent;
-		pC->blocks[blkno].data.mat[ijtok(indexj,indexi,blksz)]=ent;
+                if (pC->blocks[blkno].data.mat[ijtok(indexi,indexj,blksz)] != 0.0)
+                  {
+                    /*
+                     * We've got a duplicate entry in C!
+                     */
+                    if (printlevel >= 1)
+                      {
+                        printf("Incorrect SDPA file. Duplicate entry.\n");
+                        printf("matno=%d\n",matno);
+                        printf("blkno=%d\n",blkno);
+                        printf("indexi=%d\n",indexi);
+                        printf("indexj=%d\n",indexj);
+                      };
+
+                    fclose(fid);
+                    free(isdiag);
+                    return(1);                    
+                  }
+                else
+                  {
+                    pC->blocks[blkno].data.mat[ijtok(indexi,indexj,blksz)]=ent;
+                    pC->blocks[blkno].data.mat[ijtok(indexj,indexi,blksz)]=ent;
+                  };
 	      };
 	  };
       };
@@ -623,7 +676,8 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
 
   if ((ret != EOF) && (ret != 0))
     {
-      printf("Incorrect SDPA file. \n");
+      if (printlevel >= 1)
+        printf("Incorrect SDPA file. \n");
       fclose(fid);
       free(isdiag);
       return(1);
@@ -681,77 +735,11 @@ int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
       p=myconstraints[i].blocks;
       while (p != NULL)
 	{
-	  /*
-	   * First, set issparse.
-	   */
-	  if (((p->numentries) > 0.25*(p->blocksize)) && ((p->numentries) > 15))
-	    {
-	      p->issparse=0;
-	    }
-	  else
-	    {
-	      p->issparse=1;
-	    };
-	  
-	  if (pC->blocks[p->blocknum].blockcategory == DIAG)
-	    p->issparse=1;
-	  
-	  /*
-	   * Setup the cross links.
-	   */
-	  
 	  p->nextbyblock=NULL;
 	  p=p->next;
 	};
     };
   
-  /*
-   * Now, cross link.
-   */
-  
-  prev=NULL;
-  for (i=1; i<=*pk; i++)
-    {
-      p=myconstraints[i].blocks;
-      while (p != NULL)
-	{
-	  if (p->nextbyblock == NULL)
-	    {
-	      blk=p->blocknum;
-	      
-	      /*
-	       * link in the remaining blocks.
-	       */
-	      for (j=i+1; j<=*pk; j++)
-		{
-		  q=myconstraints[j].blocks;
-		  
-		  while (q != NULL)
-		    {
-		      if (q->blocknum == p->blocknum)
-			{
-			  if (p->nextbyblock == NULL)
-			    {
-			      p->nextbyblock=q;
-			      q->nextbyblock=NULL;
-			      prev=q;
-			    }
-			  else
-			    {
-			      prev->nextbyblock=q;
-			      q->nextbyblock=NULL;
-			      prev=q;
-			    };
-			  break;
-			};
-		      q=q->next;
-		    };
-		};
-	    };
-	  p=p->next;
-	};
-    };
-
   /*
    * Free unneeded memory.
    */
@@ -795,70 +783,42 @@ int get_line(fid,buffer,bufsiz)
      char *buffer;
      int bufsiz;
 {
-  int i;
   int k;
   char c;
 
-  k=0;
-  c=getc(fid);
-  while (c != '\n')
+  if (fgets(buffer,bufsiz-1,fid) != NULL)
     {
-      buffer[k]=c;
-      k++;
-      c=getc(fid);
-      if (c == EOF) return(2);
-      if (k >=bufsiz) 
-	{
-	  printf("Line too long in input file!  Adjust BUFFERSIZ in readprob.c\n");
-	  return(1);
-	};
-    };
-  buffer[k]='\n';
-  buffer[k+1]=0;
-
-  for (i=0; i<=k; i++)
-    {
-      if (buffer[i]==',')
-	buffer[i]=' ';
-      if (buffer[i]=='{')
-	buffer[i]=' ';
-      if (buffer[i]=='}')
-	buffer[i]=' ';
-      if (buffer[i]=='(')
-	buffer[i]=' ';
-      if (buffer[i]==')')
-	buffer[i]=' ';
-    };
-
-  return(0);
-}
-
-int max_line_length(fid)
-     FILE *fid;
-{
-  int maxlen;
-  int k;
-  int c;
-
-  maxlen=0;
-  k=0;
-  c=getc(fid);
-  while (c != EOF)
-    {
+      c=buffer[0];
       k=0;
-      while ((c != '\n') && (c != EOF))
-	{
-	  c=getc(fid);
-	  k++;
-	};
-      if (k > maxlen)
-	maxlen=k;
-      c=getc(fid);
-    };
+      while ((c != '\n')  && (c!=0) && (k<bufsiz))
+        {
+          if (c==',')
+            buffer[k]=' ';
+          if (c=='(')
+            buffer[k]=' ';
+          if (c==')')
+            buffer[k]=' ';
+          if (c=='{')
+            buffer[k]=' ';
+          if (c=='}')
+            buffer[k]=' ';
+          k=k+1;
+          c=buffer[k];
+        };
 
-  return(maxlen);
-
+      /*
+       * return an error if the line is longer than the buffer!
+       */
+      
+      if (k<bufsiz-5)
+        return(0);
+      else
+        return(1);
+    }
+  else
+    return(2);
 }
+  
 
 void countentry(constraints,matno,blkno,blocksize)
      struct constraintmatrix *constraints;
@@ -879,8 +839,8 @@ void countentry(constraints,matno,blkno,blocksize)
       p=(struct sparseblock *)malloc(sizeof(struct sparseblock));
       if (p==NULL)
 	{
-	  printf("Storage allocation failed!\n");
-	  exit(10);
+          printf("Storage allocation failed!\n");
+	  exit(205);
 	};
       p->constraintnum=matno;
       p->blocknum=blkno;
@@ -929,8 +889,8 @@ void countentry(constraints,matno,blkno,blocksize)
       q=(struct sparseblock *)malloc(sizeof(struct sparseblock));
       if (q==NULL)
 	{
-	  printf("Storage allocation failed!\n");
-	  exit(10);
+          printf("Storage allocation failed!\n");
+	  exit(205);
 	};
       /*
        * Fill in information for this block.
@@ -951,7 +911,7 @@ void countentry(constraints,matno,blkno,blocksize)
 
 }
 
-void addentry(constraints,matno,blkno,indexi,indexj,ent)
+int addentry(constraints,matno,blkno,indexi,indexj,ent)
      struct constraintmatrix *constraints;
      int matno;
      int blkno;
@@ -960,13 +920,29 @@ void addentry(constraints,matno,blkno,indexi,indexj,ent)
      double ent;
 {
   struct sparseblock *p;
+  int itemp;
+    
+  /*
+   * Arrange things so that indexi <= indexj.
+   */
 
+  if (indexi > indexj)
+    {
+      itemp=indexi;
+      indexi=indexj;
+      indexj=itemp;
+    };
+
+  /* 
+   * Find the appropriate block.
+   */
+  
   p=constraints[matno].blocks;
   
   if (p == NULL)
     {
-      printf("Internal Error in CSDP!\n");
-      exit(100);
+      printf("Internal Error in readprob.c !\n");
+      exit(206);
     }
   else
     {
@@ -980,25 +956,34 @@ void addentry(constraints,matno,blkno,indexi,indexj,ent)
 	  if (p->blocknum == blkno)
 	    {
 	      /*
-	       * Found the right block.
+	       * Found the right block. 
 	       */
+
 	      p->numentries=(p->numentries)+1;
 	      p->entries[(p->numentries)]=ent;
 	      p->iindices[(p->numentries)]=indexi;
 	      p->jindices[(p->numentries)]=indexj;
 
-
-	      return;
+              /*
+               * We've successfully added the entry.
+               */
+              
+	      return(0);
 	    };
 	  p=p->next;
 	};
       /*
        * If we get here, we have an internal error.
        */
-      printf("Internal Error in CSDP!\n");
-      exit(100);
+      printf("Internal Error in CSDP readprob.c !\n");
+      exit(206);
     };
 
+  /*
+   * Everything is good, so return 0.
+   */
+
+  return(0);
 
 }
 

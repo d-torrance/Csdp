@@ -29,8 +29,9 @@ void sym_mat(A)
 	case MATRIX:
 	  n=A.blocks[blk].blocksize;
 	  ap=A.blocks[blk].data.mat;
+#pragma omp parallel for schedule(dynamic,64) default(none) private(i,j,foo) shared(ap,n)
 	  for (j=1; j<=n; j++)
-	    for (i=1; i<=j; i++)
+	    for (i=1; i<j; i++)
 	      {
 		foo=(ap[ijtok(i,j,n)]+ap[ijtok(j,i,n)])/2.0;
 		ap[ijtok(i,j,n)]=foo;
@@ -40,7 +41,7 @@ void sym_mat(A)
 	case PACKEDMATRIX:
 	default:
 	  printf("sym_mat illegal block type \n");
-	  exit(12);
+	  exit(206);
 	};
     };
 

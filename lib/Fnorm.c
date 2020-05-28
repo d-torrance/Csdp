@@ -1,5 +1,7 @@
 /*
-  Compute the Frobenius norm of a matrix.
+  Compute the Frobenius norm of a symmetric matrix.  Note that this routine
+  requires symmetry and saves memory accesses by only using the upper triangle
+  of the matrix.
   */
 #include <stdlib.h>
 #include <stdio.h>
@@ -12,7 +14,8 @@ double Fnorm(A)
   int blk;
   double nrm;
   double temp;
-
+  int i,j;
+  
   nrm=0;
   for (blk=1; blk<=A.nblocks; blk++)
     {
@@ -23,14 +26,22 @@ double Fnorm(A)
 	  nrm += temp*temp;
 	  break;
 	case MATRIX:
-	  temp=norm2(A.blocks[blk].blocksize*A.blocks[blk].blocksize,
-		     A.blocks[blk].data.mat);
-	  nrm += temp*temp;
+	  temp=0;
+#pragma omp parallel for schedule(dynamic,64) default(none) private(i,j) shared(blk,A) reduction(+:temp)
+          for (j=1; j<=A.blocks[blk].blocksize; j++)
+#pragma omp simd
+	    for (i=1; i<j; i++)
+	      temp+=A.blocks[blk].data.mat[ijtok(i,j,A.blocks[blk].blocksize)]*A.blocks[blk].data.mat[ijtok(i,j,A.blocks[blk].blocksize)];
+	  temp=2.0*temp;
+#pragma omp simd
+	  for (i=1; i<=A.blocks[blk].blocksize; i++)
+	    temp+=A.blocks[blk].data.mat[ijtok(i,i,A.blocks[blk].blocksize)]*A.blocks[blk].data.mat[ijtok(i,i,A.blocks[blk].blocksize)];
+	  nrm += temp;
 	  break;
 	case PACKEDMATRIX:
 	default:
 	  printf("Fnorm illegal block type \n");
-	  exit(12);
+	  exit(206);
 	};
     };
 
@@ -66,7 +77,7 @@ double Knorm(A)
 	case PACKEDMATRIX:
 	default:
 	  printf("Fnorm illegal block type \n");
-	  exit(12);
+	  exit(206);
 	};
     };
 
@@ -98,7 +109,7 @@ double mat1norm(A)
 	case PACKEDMATRIX:
 	default:
 	  printf("Fnorm illegal block type \n");
-	  exit(12);
+	  exit(206);
 	};
     };
 
@@ -135,7 +146,7 @@ double matinfnorm(A)
 	case PACKEDMATRIX:
 	default:
 	  printf("Fnorm illegal block type \n");
-	  exit(12);
+	  exit(206);
 	};
     };
 

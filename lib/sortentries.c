@@ -4,19 +4,11 @@
 #include <csdp/declarations.h>
 
 struct entry {
-#ifndef NOSHORTS
-  unsigned short indexi;
-  unsigned short indexj;
-  unsigned short indexk;
-  unsigned short indexl;
-  double entry;
-#else
   int indexi;
   int indexj;
   int indexk;
   int indexl;
   double entry;
-#endif
 };
 
 int mycompare(const void *p1, const void *p2)
@@ -83,12 +75,27 @@ void sort_entries(k,C,constraints)
   if (entries==NULL)
     {
       printf("Storage allocation failed in sortentries.\n");
-      exit(10);
+      exit(205);
     };
   
   for (i=1; i<=k; i++)
     {
       ptr=constraints[i].blocks;
+
+      /*
+       * There must be at least one block in each constraint.
+       */
+
+      if (ptr==NULL)
+        {
+          printf("Constraint %d is empty.\n",i);
+          exit(206);
+        };
+
+      /*
+       * Now, loop through the blocks.
+       */
+      
       while (ptr != NULL)
 	{
 	  /*

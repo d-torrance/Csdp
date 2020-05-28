@@ -14,7 +14,7 @@ extern "C" {
   First, to convert fortran i,j indices into a C vector index.
 */
 
-#define ijtok(iiii,jjjj,lda) ((jjjj-1)*lda+iiii-1)
+#define ijtok(iiii,jjjj,lda) ((jjjj-1)*(lda)+iiii-1)
 
 /* 
    Packed indexing.
@@ -26,8 +26,8 @@ extern "C" {
   Next, to convert C vector index into Fortran i,j indices.
 */
 
-#define ktoi(k,lda) ((k % lda)+1)
-#define ktoj(k,lda) ((k/lda)+1)
+#define ktoi(k,lda) ((k % (lda))+1)
+#define ktoj(k,lda) ((k/(lda))+1)
 
 #else
 
@@ -35,7 +35,7 @@ extern "C" {
   First, to convert fortran i,j indices into a C vector index.
 */
 
-#define ijtok(iiii,jjjj,lda) ((jjjj-1L)*lda+iiii-1L)
+#define ijtok(iiii,jjjj,lda) ((jjjj-1L)*(lda)+iiii-1L)
 
 /* 
    Packed indexing.
@@ -47,8 +47,8 @@ extern "C" {
   Next, to convert C vector index into Fortran i,j indices.
 */
 
-#define ktoi(k,lda) (((long int)k % lda)+1L)
-#define ktoj(k,lda) (((long int)k/lda)+1L)
+#define ktoi(k,lda) ((((long int)k) % (lda))+1L)
+#define ktoj(k,lda) ((((long int)k)/(lda))+1L)
 
 
 #endif

@@ -4,7 +4,7 @@
  *  blocks or eye's or other special cases.
  *
  *  A and B can have blocks of all supported types.  Unsupported types
- *  generate exit(1).
+ *  generate exit(206).
  *
  *  It is assumed that all three matrices are of compatible block strucutre.
  *
@@ -27,13 +27,18 @@ void mat_mult(scale1,scale2,A,B,C)
 
   /*
    * In theory, the BLAS ensures that if scale2=0, then C will not be 
-   * accessed before being written to.  In practice, this is not always 
-   * true, so we initilize C to zeros for safety.
+   * accessed before being written to.  Some poor implementations of the
+   * BLAS would generate NaN results if C contained NaNs, and scale2=0.0.
+   * This doesn't appear to be conforming to the reference implementation, 
+   * and I'm not aware of any current BLAS implementations with this problem, 
+   * so I'm commenting out this bit of code.  It's here only in case this
+   * problem arises again.
+
+
+         if (scale2 == 0.0)
+            zero_mat(C);
+
    */
-
-  if (scale2 == 0.0)
-    zero_mat(C);
-
 
   /*
    * Work through the blocks one at a time.
@@ -76,7 +81,7 @@ void mat_mult(scale1,scale2,A,B,C)
 	  break;
 	default:
 	  printf("mat_mult illegal block type!\n");
-	  exit(12);
+	  exit(206);
 	};
 
     };
@@ -90,6 +95,10 @@ void mat_mult_raw(n,scale1,scale2,ap,bp,cp)
      double *bp;
      double *cp;
 {
+
+#ifdef HIDDENSTRLEN
+  dgemm_("N","N",&n,&n,&n,&scale1,ap,&n,bp,&n,&scale2,cp,&n,1,1);
+#else
 #ifdef NOUNDERBLAS
 #ifdef CAPSBLAS
 	  DGEMM("N","N",&n,&n,&n,&scale1,ap,&n,bp,&n,&scale2,cp,&n);
@@ -103,7 +112,7 @@ void mat_mult_raw(n,scale1,scale2,ap,bp,cp)
 	  dgemm_("N","N",&n,&n,&n,&scale1,ap,&n,bp,&n,&scale2,cp,&n);
 #endif
 #endif
-
+#endif
 }
 
 #ifdef USEATLAS

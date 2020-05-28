@@ -54,12 +54,12 @@ int main(argc,argv)
 
   if ((argc < 2) || (argc > 4)) 
     {
-      printf("CSDP 6.2 beta\n");
+      printf("CSDP 6.2.0\n");
       printf(" \n");
       printf("Usage: \n");
       printf("\n");
       printf("csdp <input problem> [<final solution>] [<initial solution>]\n");
-      exit(1);
+      exit(200);
     };
 
 
@@ -71,7 +71,7 @@ int main(argc,argv)
   if (ret != 0)
     {
       printf("Giving up.\n");
-      exit(10);
+      exit(201);
     };
 
   if (argc == 4)
@@ -80,7 +80,7 @@ int main(argc,argv)
       if (ret != 0)
 	{
 	  printf("Giving up.\n");
-	  exit(10);
+	  exit(202);
 	};
     }
   else

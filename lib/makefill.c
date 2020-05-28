@@ -35,12 +35,15 @@ void makefill(k,C,constraints,pfill,work1,printlevel)
       switch(C.blocks[blk].blockcategory)
 	{
 	case DIAG:
+#pragma omp simd
 	  for (i=1; i<=C.blocks[blk].blocksize; i++)
 	    work1.blocks[blk].data.vec[i]=1.0;
 	  break;
 	case MATRIX:
-	  for (i=1; i<=C.blocks[blk].blocksize; i++)
-	    for (j=1; j<=C.blocks[blk].blocksize; j++)
+#pragma omp parallel for schedule(dynamic,64) default(none) private(i,j) shared(C,work1,blk)	  
+	  for (j=1; j<=C.blocks[blk].blocksize; j++)
+#pragma omp simd
+	    for (i=1; i<=C.blocks[blk].blocksize; i++)
 	      {
 		if ((C.blocks[blk].data.mat[ijtok(i,j,C.blocks[blk].blocksize)] != 0.0) || (i == j))
 		  work1.blocks[blk].data.mat[ijtok(i,j,C.blocks[blk].blocksize)]=1.0;
@@ -49,7 +52,7 @@ void makefill(k,C,constraints,pfill,work1,printlevel)
 	case PACKEDMATRIX:
 	default:
 	  printf("makefill illegal block type \n");
-	  exit(12);
+	  exit(206);
 	};
     };
 
@@ -80,7 +83,7 @@ void makefill(k,C,constraints,pfill,work1,printlevel)
 	    case PACKEDMATRIX:
 	    default:
 	      printf("addscaledmat illegal block type \n");
-	      exit(12);
+	      exit(206);
 	    };  
 
 	  ptr=ptr->next;
@@ -98,7 +101,7 @@ void makefill(k,C,constraints,pfill,work1,printlevel)
   if (ptr == NULL)
     {
       printf("Storage Allocation Failed!\n");
-      exit(10);
+      exit(205);
     };
   pfill->blocks=ptr;
   ptr->next=NULL;
@@ -112,7 +115,7 @@ void makefill(k,C,constraints,pfill,work1,printlevel)
       if (ptr->next == NULL)
 	{
 	  printf("Storage Allocation Failed!\n");
-	  exit(10);
+	  exit(205);
 	};
       ptr=ptr->next;
       ptr->blocknum=i;
@@ -139,29 +142,23 @@ void makefill(k,C,constraints,pfill,work1,printlevel)
 	  if (ptr->entries == NULL)
 	    {
 	      printf("Storage Allocation Failed!\n");
-	      exit(10);
+	      exit(205);
 	    };
-#ifdef NOSHORTS
+
 	  ptr->iindices=(int *) malloc((ptr->blocksize+1)*sizeof(int));
-#else
-	  ptr->iindices=(unsigned short *) malloc((ptr->blocksize+1)*sizeof(unsigned short));
-#endif
 
 	  if (ptr->iindices == NULL)
 	    {
 	      printf("Storage Allocation Failed!\n");
-	      exit(10);
+	      exit(205);
 	    };
 
-#ifdef NOSHORTS
 	  ptr->jindices=(int *) malloc((ptr->blocksize+1)*sizeof(int));
-#else
-	  ptr->jindices=(unsigned short *) malloc((ptr->blocksize+1)*sizeof(unsigned short));
-#endif
+
 	  if (ptr->jindices == NULL)
 	    {
 	      printf("Storage Allocation Failed!\n");
-	      exit(10);
+	      exit(205);
 	    };
 
 	  for (j=1; j<=ptr->numentries; j++)
@@ -191,31 +188,23 @@ void makefill(k,C,constraints,pfill,work1,printlevel)
 	  if (ptr == NULL)
 	    {
 	      printf("Storage Allocation Failed!\n");
-	      exit(10);
+	      exit(205);
 	    };
 
-#ifdef NOSHORTS
 	  ptr->iindices=(int *) malloc((ptr->numentries+1)*sizeof(int));
-#else
-	  ptr->iindices=(unsigned short *) malloc((ptr->numentries+1)*sizeof(unsigned short));
-#endif
 
 	  if (ptr->iindices == NULL)
 	    {
 	      printf("Storage Allocation Failed!\n");
-	      exit(10);
+	      exit(205);
 	    };
 
-#ifdef NOSHORTS
 	  ptr->jindices=(int *) malloc((ptr->numentries+1)*sizeof(int));
-#else
-	  ptr->jindices=(unsigned short *) malloc((ptr->numentries+1)*sizeof(unsigned short));
-#endif
 
 	  if (ptr->jindices == NULL)
 	    {
 	      printf("Storage Allocation Failed!\n");
-	      exit(10);
+	      exit(205);
 	    };
 
           ptr->numentries=0;
@@ -237,7 +226,7 @@ void makefill(k,C,constraints,pfill,work1,printlevel)
 	case PACKEDMATRIX:
 	default:
 	  printf("makefill illegal block type \n");
-	  exit(12);
+	  exit(206);
 	};
 
       ptr=ptr->next;
@@ -247,14 +236,17 @@ void makefill(k,C,constraints,pfill,work1,printlevel)
    * Print out information about fill.
    */
 
-  ptr=pfill->blocks;
-  while (ptr != NULL)
+  if (printlevel >= 3)
     {
-      blk=ptr->blocknum;
-      if (printlevel >= 3)
-	printf("Block %d, Size %d, Fill %d, %.2f \n",blk,C.blocks[blk].blocksize,ptr->numentries,100.0*ptr->numentries/(C.blocks[blk].blocksize*C.blocks[blk].blocksize*1.0));
-      ptr=ptr->next;
+      ptr=pfill->blocks;
+      while (ptr != NULL)
+	{
+	  blk=ptr->blocknum;
+	  printf("Block %d, Size %d, Fill %d, %.2f \n",blk,C.blocks[blk].blocksize,ptr->numentries,100.0*ptr->numentries/(C.blocks[blk].blocksize*C.blocks[blk].blocksize*1.0));
+	  ptr=ptr->next;
+	};      
     };
+
 }
 
 

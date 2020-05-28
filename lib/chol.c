@@ -20,7 +20,12 @@ int chol_blk(n,lda,A)
 
   info=0;
 
-
+#ifdef HIDDENSTRLEN
+  dpotrf_("U",&n,A,&lda,&info,1);
+#else
+#ifdef HIDDENSTRLEN
+  dpotrf_("U",&n,A,&lda,&info,1);
+#else
 #ifdef NOUNDERLAPACK
   #ifdef CAPSLAPACK
     DPOTRF("U",&n,A,&lda,&info);
@@ -34,7 +39,9 @@ int chol_blk(n,lda,A)
     dpotrf_("U",&n,A,&lda,&info);
   #endif
 #endif
-
+#endif
+#endif
+    
   if (info != 0)
     {
       return(1);
@@ -105,7 +112,7 @@ int chol(A)
 	  break;
 	default:
 	  printf("Unknown block type! \n");
-	  exit(12);
+	  exit(206);
 	};
       if (ret != 0)
 	return(1);
@@ -139,7 +146,7 @@ void trans(A)
 	  break;
 	default:
 	  printf("Unknown block type! \n");
-	  exit(12);
+	  exit(206);
 	};
     };
 
@@ -160,7 +167,6 @@ void chol_inv(A,work)
   int blk;
   int n;
   double *ap;
-  double scale;
 
   copy_mat(A,work);
 
@@ -175,8 +181,10 @@ void chol_inv(A,work)
 	case MATRIX:
 	  n=work.blocks[blk].blocksize;
 	  ap=work.blocks[blk].data.mat;
-          scale=1.0;
 
+#ifdef HIDDENSTRLEN
+   	  dtrtri_("U","N",&n,ap,&n,&info,1,1);
+#else
 #ifdef NOUNDERLAPACK
 #ifdef CAPSLAPACK
 	  DTRTRI("U","N",&n,ap,&n,&info);
@@ -190,17 +198,18 @@ void chol_inv(A,work)
 	  dtrtri_("U","N",&n,ap,&n,&info);
 #endif
 #endif
-
+#endif
+          
 	  if (info != 0)
 	    {
 	      printf("DTTRI failed!\n");
-	      exit(11);
+	      exit(206);
 	    };
 
 	  break;
 	default:
 	  printf("Unknown block type! \n");
-	  exit(12);
+	  exit(206);
 	};
     };
 

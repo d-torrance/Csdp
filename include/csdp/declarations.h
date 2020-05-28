@@ -61,6 +61,8 @@ double calc_dobj(int k, double *a, double *y, double constant_offset);
 
 double trace_prod(struct blockmatrix A, struct blockmatrix B);
 
+double trace(struct blockmatrix A);
+
 double linesearch(int n, struct blockmatrix dX,
 		  struct blockmatrix work1, struct blockmatrix work2, 
 		  struct blockmatrix work3, struct blockmatrix cholinv, 
@@ -72,7 +74,7 @@ double pinfeas(int k, struct constraintmatrix *constraints,
 
 double dinfeas(int k, struct blockmatrix C, 
 	       struct constraintmatrix *constraints, double *y, 
-	       struct blockmatrix Z, struct blockmatrix work1);
+	       struct blockmatrix Z, struct blockmatrix work1, double nrmC);
 
 double dimacserr3(int k, struct blockmatrix C, 
 	       struct constraintmatrix *constraints, double *y, 
@@ -97,6 +99,14 @@ void op_o(int k, struct constraintmatrix *constraints,
 void addscaledmat(struct blockmatrix A, double scale, struct blockmatrix B,
 		  struct blockmatrix C);
 
+void addscaledI(struct blockmatrix A, double scale);
+
+void scalemat(double scale, struct blockmatrix B,
+		  struct blockmatrix C);
+
+void addscaledmatut(struct blockmatrix A, double scale, struct blockmatrix B,
+		  struct blockmatrix C);
+
 void zero_mat(struct blockmatrix A);
 
 void add_mat(struct blockmatrix A,struct blockmatrix B);
@@ -104,6 +114,8 @@ void add_mat(struct blockmatrix A,struct blockmatrix B);
 void sym_mat(struct blockmatrix A);
 
 void make_i(struct blockmatrix A);
+
+void make_scaled_i(struct blockmatrix A,double mu);
 
 void copy_mat(struct blockmatrix A, struct blockmatrix B);
 
@@ -129,6 +141,16 @@ void mat_mult_rawatlas(int n, double scale1, double scale2, double *ap,
 		  double *bp, double *cp);
 
 void matvec(struct blockmatrix A, double *x, double *y);
+
+void matvecR(struct blockmatrix A, double *x, double *y);
+
+void matvecRT(struct blockmatrix A, double *x, double *y);
+
+void matvecsym(struct blockmatrix A, double *x, double *y);
+
+void matvecsymR(struct blockmatrix A, double *x, double *y);
+
+void matvecsymRT(struct blockmatrix A, double *x, double *y);
 
 void alloc_mat(struct blockmatrix A, struct blockmatrix *pB);
 
@@ -191,6 +213,11 @@ int easy_sdp(int n, int k, struct blockmatrix C, double *a,
 	     struct blockmatrix *pX, double **py, struct blockmatrix *pZ,
 	     double *ppobj, double *pdobj);
 
+int checkconstraints(int n, int k, struct blockmatrix C,
+		     struct constraintmatrix *constraints, int printlevel);
+
+int checkc(int n, struct blockmatrix C, int printlevel);
+  
 void tweakgap(int n, int k, double *a, struct constraintmatrix *constraints,
 	      double gap, struct blockmatrix Z, struct blockmatrix dZ, 
 	      double *y, double *dy, struct blockmatrix work1, 
@@ -221,6 +248,7 @@ void DGEMV();
 void DGER();
 void DTRSM();
 void DTRMV();
+void DSYMV();
 #else
 double DNRM2_();
 double DASUM_();
@@ -231,6 +259,7 @@ void DGEMV_();
 void DGER_();
 void DTRSM_();
 void DTRMV_();
+void DSYMV_();
 #endif
 #else
 #ifdef NOUNDERBLAS
@@ -243,6 +272,7 @@ void dgemv();
 void dger();
 void dtrsm();
 void dtrmv();
+void dsymv();
 #else
 double dnrm2_();
 double dasum_();
@@ -253,6 +283,7 @@ void dgemv_();
 void dger_();
 void dtrsm_();
 void dtrmv_();
+void dsymv_();
 #endif
 #endif
 

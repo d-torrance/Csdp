@@ -29,14 +29,14 @@ void store_packed(A,B)
 	  p=A.blocks[blk].data.mat;
 	  q=B.blocks[blk].data.mat;
 	  n=A.blocks[blk].blocksize;
-#pragma omp parallel for schedule(dynamic,64) private(i,j) shared(p,q,n)
+#pragma omp parallel for schedule(dynamic,64) private(i,j) shared(p,q,n) 
 	  for (j=1; j<=n; j++)
 	    for (i=1; i<=j; i++)
 	      q[ijtokp(i,j,n)]=p[ijtok(i,j,n)];
 	  break;
 	default:
 	  printf("store_packed illegal block type \n");
-	  exit(12);
+	  exit(206);
 	};
     }
 
@@ -68,6 +68,7 @@ void store_unpacked(A,B)
 	  for (j=1; j<=n; j++)
 	    for (i=1; i<=j; i++)
 	      q[ijtok(i,j,n)]=p[ijtokp(i,j,n)];
+#pragma omp parallel for schedule(dynamic,64) private(i,j) shared(p,q,n)
 	  for (j=1; j<n; j++)
 	    for (i=j+1; i<=n; i++)
 	      q[ijtok(i,j,n)]=q[ijtok(j,i,n)];
@@ -75,7 +76,7 @@ void store_unpacked(A,B)
 	  break;
 	default:
 	  printf("store_unpacked block type \n");
-	  exit(12);
+	  exit(206);
 	};
     }
 
@@ -108,7 +109,7 @@ void alloc_mat_packed(A,pB)
   if (pB->blocks == NULL)
     {
       printf("Storage allocation failed!\n");
-      exit(10);
+      exit(205);
     };
   /*
    *  Now, fill in the info for each block.
@@ -126,7 +127,7 @@ void alloc_mat_packed(A,pB)
 	  if (pB->blocks[blk].data.vec == NULL)
 	    {
 	      printf("Storage allocation failed!\n");
-	      exit(10);
+	      exit(205);
 	    };
 	  break;
 	case MATRIX:
@@ -137,12 +138,12 @@ void alloc_mat_packed(A,pB)
 	  if (pB->blocks[blk].data.mat == NULL)
 	    {
 	      printf("Storage allocation failed!\n");
-	      exit(10);
+	      exit(205);
 	    };
 	  break;
 	default:
 	  printf("Illegal block type!\n");
-	  exit(12);
+	  exit(206);
 	};
     };
 }
@@ -170,7 +171,7 @@ void free_mat_packed(A)
 	  break;
 	default:
 	  printf("Illegal block type!\n");
-	  exit(12);
+	  exit(206);
 	};
     };
 
@@ -196,14 +197,14 @@ void triu(A)
 	  break;
 	case MATRIX:
 	  n=A.blocks[blk].blocksize;
-#pragma omp parallel for schedule(dynamic,64) private(i,j) shared(A,n)
+#pragma omp parallel for schedule(dynamic,64) private(i,j) shared(A,n) 
 	  for (j=1; j<n; j++)
 	    for (i=j+1; i<=n; i++)
 	      A.blocks[blk].data.mat[ijtok(i,j,n)]=0.0;
 	  break;
 	default:
 	  printf("triu illegal block type!\n");
-	  exit(12);
+	  exit(206);
 	};
     };
   

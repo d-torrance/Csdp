@@ -45,7 +45,7 @@ double linesearch(n,dX,work1,work2,work3,cholinv,q,z,workvec,
   if (lanczosvectors==NULL)
     {
       printf("Storage Allocation Failed!\n");
-      exit(10);
+      exit(205);
     };
 
   /*
@@ -86,17 +86,17 @@ double linesearch(n,dX,work1,work2,work3,cholinv,q,z,workvec,
 
   if (method==1)
     {
-      scale1=-1.0;
-      zero_mat(work1);
+      /*
+       * Method 1. We'll use matrix-vector mults.
+       */
+
       store_unpacked(cholinv,work3);
       triu(work3);
-      addscaledmat(work1,scale1,work3,work2);
-      trans(work2);
     }
   else
     {
       /*
-       * method=2.
+       * method=2.  We'll pre-multiply the matrices.
        */
       /*
        * First, multiply dX*cholinv.  Store it in work3.
@@ -116,6 +116,10 @@ double linesearch(n,dX,work1,work2,work3,cholinv,q,z,workvec,
       scale1=-1.0;
       scale2=0.0;
       mat_mult(scale1,scale2,work2,work3,work1);
+
+      /*
+       * The required product is in work1.
+       */
     };
 
   /*
@@ -139,13 +143,19 @@ double linesearch(n,dX,work1,work2,work3,cholinv,q,z,workvec,
 
       if (method == 1)
 	{
-	  matvec(work3,q,z);
-	  matvec(dX,z,workvec);
-	  matvec(work2,workvec,z);
+	  matvecR(work3,q,z);
+	  matvecsym(dX,z,workvec);
+	  matvecRT(work3,workvec,z);
+          /*
+           * Because we didn't put the minus sign in by transposing 
+           * work3, we need to do it here.  
+           */
+          for (i=1; i<=n; i++)
+            z[i]=-z[i];        
 	}
       else
 	{
-	  matvec(work1,q,z);
+	  matvecsym(work1,q,z);
 	};
 
       lalpha[j]=0.0;
@@ -163,7 +173,10 @@ double linesearch(n,dX,work1,work2,work3,cholinv,q,z,workvec,
       scale1=1.0;
       scale2=0.0;
       inc=1;
-      
+
+#ifdef HIDDENSTRLEN
+      dgemv_("T",&n,&j,&scale1,lanczosvectors,&n,z+1,&inc,&scale2,reorth+1,&inc,1,1);
+#else
 #ifdef NOUNDERBLAS
 #ifdef CAPSBLAS
       DGEMV("T",&n,&j,&scale1,lanczosvectors,&n,z+1,&inc,&scale2,reorth+1,&inc);
@@ -177,11 +190,14 @@ double linesearch(n,dX,work1,work2,work3,cholinv,q,z,workvec,
       dgemv_("T",&n,&j,&scale1,lanczosvectors,&n,z+1,&inc,&scale2,reorth+1,&inc);
 #endif
 #endif
-
+#endif
       scale1=-1.0;
       scale2=1.0;
       inc=1;
 
+#ifdef HIDDENSTRLEN
+      dgemv_("N",&n,&j,&scale1,lanczosvectors,&n,reorth+1,&inc,&scale2,z+1,&inc,1);
+#else
 #ifdef NOUNDERBLAS
 #ifdef CAPSBLAS
       DGEMV("N",&n,&j,&scale1,lanczosvectors,&n,reorth+1,&inc,&scale2,z+1,&inc);
@@ -193,13 +209,17 @@ double linesearch(n,dX,work1,work2,work3,cholinv,q,z,workvec,
       DGEMV_("N",&n,&j,&scale1,lanczosvectors,&n,reorth+1,&inc,&scale2,z+1,&inc);
 #else
       dgemv_("N",&n,&j,&scale1,lanczosvectors,&n,reorth+1,&inc,&scale2,z+1,&inc);
+#endif
 #endif
 #endif
 	  
       scale1=1.0;
       scale2=0.0;
       inc=1;
-      
+
+#ifdef HIDDENSTRLEN
+      dgemv_("T",&n,&j,&scale1,lanczosvectors,&n,z+1,&inc,&scale2,reorth+1,&inc,1);
+#else
 #ifdef NOUNDERBLAS
 #ifdef CAPSBLAS
       DGEMV("T",&n,&j,&scale1,lanczosvectors,&n,z+1,&inc,&scale2,reorth+1,&inc);
@@ -213,11 +233,15 @@ double linesearch(n,dX,work1,work2,work3,cholinv,q,z,workvec,
       dgemv_("T",&n,&j,&scale1,lanczosvectors,&n,z+1,&inc,&scale2,reorth+1,&inc);
 #endif
 #endif
+#endif
 
       scale1=-1.0;
       scale2=1.0;
       inc=1;
 
+#ifdef HIDDENSTRLEN
+      dgemv_("N",&n,&j,&scale1,lanczosvectors,&n,reorth+1,&inc,&scale2,z+1,&inc,1);     
+#else
 #ifdef NOUNDERBLAS
 #ifdef CAPSBLAS
       DGEMV("N",&n,&j,&scale1,lanczosvectors,&n,reorth+1,&inc,&scale2,z+1,&inc);
@@ -231,7 +255,7 @@ double linesearch(n,dX,work1,work2,work3,cholinv,q,z,workvec,
       dgemv_("N",&n,&j,&scale1,lanczosvectors,&n,reorth+1,&inc,&scale2,z+1,&inc);
 #endif
 #endif
-	  
+#endif	  
 
       /*
        * Compute the norm of z.

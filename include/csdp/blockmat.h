@@ -34,11 +34,7 @@ union blockdatarec {
 struct blockrec {
   union blockdatarec data;
   enum blockcat blockcategory;
-#ifndef NOSHORTS
-  unsigned short blocksize;
-#else
   int blocksize;
-#endif
 };
 
 /*
@@ -61,15 +57,6 @@ struct sparseblock {
   struct sparseblock *next;
   struct sparseblock *nextbyblock;
   double *entries;
-#ifndef NOSHORTS
-  unsigned short *iindices;
-  unsigned short *jindices;
-  int numentries;
-  unsigned short blocknum;
-  unsigned short blocksize;
-  unsigned short constraintnum;
-  unsigned short issparse;
-#else
   int *iindices;
   int *jindices;
   int numentries;
@@ -77,7 +64,6 @@ struct sparseblock {
   int blocksize;
   int constraintnum;
   int issparse;
-#endif
 };
 
 
