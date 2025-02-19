@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 #include <strings.h>
-#include "declarations.h"
+#include <csdp/declarations.h>
 
 void initparams(params,pprintlevel)
      struct paramstruc *params;

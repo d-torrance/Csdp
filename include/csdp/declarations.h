@@ -5,14 +5,16 @@
 
 #ifndef CSDPDECLARATIONS
 #define CSDPDECLARATIONS 
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 /*
   Other important includes that we need.
  */
 
-#include "index.h"
-#include "blockmat.h"
-#include "parameters.h"
+#include <csdp/index.h>
+#include <csdp/blockmat.h>
+#include <csdp/parameters.h>
 
 /*
   Our own routines.
@@ -289,5 +291,7 @@ void dtrtri_();
 #endif
 #endif
 
-
+#ifdef __cplusplus
+}
+#endif
 #endif
