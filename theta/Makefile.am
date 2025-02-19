@@ -1,0 +1,14 @@
+bin_PROGRAMS = csdp-theta csdp-complement csdp-graphtoprob csdp-randgraph
+check_PROGRAMS = csdp-theta csdp-complement csdp-graphtoprob csdp-randgraph
+csdp_theta_SOURCES = theta.c
+csdp_graphtoprob_SOURCES = graphtoprob.c
+csdp_randgraph_SOURCES = rand_graph.c
+csdp_complement_SOURCES = complement.c
+csdp_theta_CPPFLAGS = -I$(top_srcdir)/include
+csdp_graphtoprob_CPPFLAGS = -I$(top_srcdir)/include
+csdp_randgraph_CPPFLAGS = -I$(top_srcdir)/include
+csdp_complement_CPPFLAGS = -I$(top_srcdir)/include
+csdp_theta_LDADD=../lib/libsdp.la
+csdp_graphtoprob_LDADD=../lib/libsdp.la
+csdp_randgraph_LDADD=../lib/libsdp.la
+csdp_complement_LDADD=../lib/libsdp.la
