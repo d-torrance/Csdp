@@ -9,20 +9,22 @@
 #include <limits.h>
 #include <csdp/declarations.h>
 
-void skip_to_end_of_line();
-int get_line();
-int max_line_length();
-void countentry();
-int addentry();
+void skip_to_end_of_line(FILE *fid);
+int get_line(FILE *fid, char *buffer, int bufsiz);
+int max_line_length(FILE *fid);
+void countentry(struct constraintmatrix *constraints, int matno, int blkno,
+                int blocksize);
+int addentry(struct constraintmatrix *constraints, int matno, int blkno,
+             int indexi, int indexj, double ent);
 
-int read_prob(fname,pn,pk,pC,pa,pconstraints,printlevel)
-     char *fname;
-     int *pn;
-     int *pk;
-     struct blockmatrix *pC;
-     double **pa;
-     struct constraintmatrix **pconstraints;
-     int printlevel;
+int read_prob(
+     char *fname,
+     int *pn,
+     int *pk,
+     struct blockmatrix *pC,
+     double **pa,
+     struct constraintmatrix **pconstraints,
+     int printlevel)
      
 {
   struct constraintmatrix *myconstraints;
@@ -759,8 +761,8 @@ b	       */
  *  file fid.
  */
 
-void skip_to_end_of_line(fid)
-     FILE *fid;
+void skip_to_end_of_line(
+     FILE *fid)
 {
   char c;
  
@@ -775,10 +777,10 @@ void skip_to_end_of_line(fid)
  *
  */
 
-int get_line(fid,buffer,bufsiz)
-     FILE *fid;
-     char *buffer;
-     int bufsiz;
+int get_line(
+     FILE *fid,
+     char *buffer,
+     int bufsiz)
 {
   int i;
   int k;
@@ -818,8 +820,8 @@ int get_line(fid,buffer,bufsiz)
   return(0);
 }
 
-int max_line_length(fid)
-     FILE *fid;
+int max_line_length(
+     FILE *fid)
 {
   int maxlen;
   int k;
@@ -845,11 +847,11 @@ int max_line_length(fid)
 
 }
 
-void countentry(constraints,matno,blkno,blocksize)
-     struct constraintmatrix *constraints;
-     int matno;
-     int blkno;
-     int blocksize;
+void countentry(
+     struct constraintmatrix *constraints,
+     int matno,
+     int blkno,
+     int blocksize)
 {
   struct sparseblock *p;
   struct sparseblock *q;
@@ -936,13 +938,13 @@ void countentry(constraints,matno,blkno,blocksize)
 
 }
 
-int addentry(constraints,matno,blkno,indexi,indexj,ent)
-     struct constraintmatrix *constraints;
-     int matno;
-     int blkno;
-     int indexi;
-     int indexj;
-     double ent;
+int addentry(
+     struct constraintmatrix *constraints,
+     int matno,
+     int blkno,
+     int indexi,
+     int indexj,
+     double ent)
 {
   struct sparseblock *p;
   int itemp;
