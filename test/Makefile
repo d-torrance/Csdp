@@ -10,6 +10,8 @@
 # 1.0e-6.  
 #
 
+.PHONY: all clean
+
 all: theta1.out g50.out 
  
 #
