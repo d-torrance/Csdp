@@ -103,6 +103,15 @@ CSDP_SHLIB_FLAGS = -dynamiclib -install_name $(libdir)/$(CSDP_SONAME) \
 CSDP_SHLIB_LINKS = ln -sf $(CSDP_SHLIB) $(CSDP_SONAME) && \
 	ln -sf $(CSDP_SHLIB) $(CSDP_SHLIB_DEV)
 
+else ifneq ($(findstring _WIN32,$(CSDP_TARGET_MACROS)),)
+# Windows has no sonames and no symlinks.  The DLL is named for its ABI
+# version and belongs next to the programs; what goes in $(libdir) is the
+# import library.  Code is always position independent, so -fPIC is not used.
+CSDP_SHLIB = libsdp-$(CSDP_SOVERSION).dll
+CSDP_IMPLIB = libsdp.dll.a
+CSDP_SHLIB_FLAGS = -shared -Wl,--out-implib,$(CSDP_IMPLIB)
+CSDP_SHLIB_LINKS = :
+
 else
 CSDP_CFLAGS += -fPIC
 CSDP_SHLIB = libsdp.so.$(CSDP_LIBVERSION)
