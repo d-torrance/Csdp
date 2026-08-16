@@ -156,6 +156,25 @@ jobs:
           make install DESTDIR="$PWD/stage" prefix=/usr TOOL_PREFIX=csdp-
           ls -l stage/usr/bin
 
+      # Windows has no sonames and no symlinks: the artifacts are a versioned
+      # DLL next to the programs and an import library in libdir.
+      - name: Shared library
+        run: |
+          make clean
+          make -j$(nproc) SHARED=yes CFLAGS="-O2 -g -Wall $STRICT" \
+            BLAS_LIBS="-lopenblas"
+          test -f lib/libsdp-0.dll
+          test -f lib/libsdp.dll.a
+          if ls lib/libsdp.so* 2>/dev/null; then
+            echo "built ELF names on Windows"; exit 1
+          fi
+          objdump -f lib/libsdp-0.dll | grep -i 'file format'
+          make unitTest SHARED=yes
+          ./.github/check-results.sh
+          make install SHARED=yes DESTDIR="$PWD/dstage" prefix=/usr
+          test -f dstage/usr/bin/libsdp-0.dll
+          test -f dstage/usr/lib/libsdp.dll.a
+
   macos:
     name: ${{ matrix.os }} / ${{ matrix.openmp }}
     runs-on: ${{ matrix.os }}
