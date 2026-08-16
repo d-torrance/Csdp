@@ -86,6 +86,24 @@ CSDP_AGE = 0
 CSDP_SOVERSION := $(shell expr $(CSDP_CURRENT) - $(CSDP_AGE))
 CSDP_LIBVERSION := $(CSDP_SOVERSION).$(CSDP_AGE).$(CSDP_REVISION)
 
+# Ask the compiler what it is targeting rather than asking uname what we are
+# running on, so that this is right when cross compiling.
+CSDP_TARGET_MACROS := $(shell : | $(CSDP_PROBE) -dM -E - 2>/dev/null)
+
+ifneq ($(findstring __APPLE__,$(CSDP_TARGET_MACROS)),)
+CSDP_CFLAGS += -fPIC
+CSDP_SHLIB = libsdp.$(CSDP_LIBVERSION).dylib
+CSDP_SONAME = libsdp.$(CSDP_SOVERSION).dylib
+CSDP_SHLIB_DEV = libsdp.dylib
+# Darwin's ld does not accept 0 for these, so libtool passes current + 1.
+CSDP_COMPAT_VERSION := $(shell expr $(CSDP_CURRENT) + 1)
+CSDP_SHLIB_FLAGS = -dynamiclib -install_name $(libdir)/$(CSDP_SONAME) \
+	-compatibility_version $(CSDP_COMPAT_VERSION) \
+	-current_version $(CSDP_COMPAT_VERSION).$(CSDP_REVISION)
+CSDP_SHLIB_LINKS = ln -sf $(CSDP_SHLIB) $(CSDP_SONAME) && \
+	ln -sf $(CSDP_SHLIB) $(CSDP_SHLIB_DEV)
+
+else
 CSDP_CFLAGS += -fPIC
 CSDP_SHLIB = libsdp.so.$(CSDP_LIBVERSION)
 CSDP_SONAME = libsdp.so.$(CSDP_SOVERSION)
@@ -93,6 +111,8 @@ CSDP_SHLIB_DEV = libsdp.so
 CSDP_SHLIB_FLAGS = -shared -Wl,-soname,$(CSDP_SONAME)
 CSDP_SHLIB_LINKS = ln -sf $(CSDP_SHLIB) $(CSDP_SONAME) && \
 	ln -sf $(CSDP_SHLIB) $(CSDP_SHLIB_DEV)
+endif
+
 endif
 
 # Both of these are POSIX interfaces that Windows lacks: USESIGTERM needs
