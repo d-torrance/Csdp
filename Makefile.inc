@@ -23,6 +23,9 @@ TOOL_PREFIX ?=
 prefix ?= /usr/local
 exec_prefix ?= $(prefix)
 bindir ?= $(exec_prefix)/bin
+libdir ?= $(exec_prefix)/lib
+includedir ?= $(prefix)/include
+pkgconfigdir ?= $(libdir)/pkgconfig
 
 CFLAGS ?= -O2 -Wall
 
@@ -53,6 +56,44 @@ CSDP_LIBS = -L$(CSDP_TOP)lib -lsdp
 # they will answer for the wrong target: a packager who selects 32 bit with
 # CFLAGS=-m32 rather than CC="gcc -m32" would otherwise get -DBIT64.
 CSDP_PROBE = $(CC) $(CPPFLAGS) $(CFLAGS)
+
+# Set SHARED=yes to build a shared library alongside libsdp.a.  The programs
+# then link against it, since -lsdp prefers the shared library when both are
+# present.
+SHARED ?= no
+
+# CSDP_VERSION is the release, and is what goes in csdp.pc.
+CSDP_VERSION = 6.2.0
+
+ifeq ($(SHARED),yes)
+
+# The shared library is versioned independently of the release, because its
+# ABI has nothing to do with the release number.  These are libtool's
+# -version-info numbers, and the rules for bumping them are libtool's:
+#
+#	if the code changed at all                       revision + 1
+#	if any interface was added, removed or changed   current + 1, revision 0
+#	if any interface was added and none removed
+#	  or changed                                     age + 1
+#	if any interface was removed or changed          age 0
+#
+CSDP_CURRENT = 0
+CSDP_REVISION = 0
+CSDP_AGE = 0
+
+# As libtool names them: the soname is libsdp.so.(current - age), and the file
+# it points at is libsdp.so.(current - age).(age).(revision).
+CSDP_SOVERSION := $(shell expr $(CSDP_CURRENT) - $(CSDP_AGE))
+CSDP_LIBVERSION := $(CSDP_SOVERSION).$(CSDP_AGE).$(CSDP_REVISION)
+
+CSDP_CFLAGS += -fPIC
+CSDP_SHLIB = libsdp.so.$(CSDP_LIBVERSION)
+CSDP_SONAME = libsdp.so.$(CSDP_SOVERSION)
+CSDP_SHLIB_DEV = libsdp.so
+CSDP_SHLIB_FLAGS = -shared -Wl,-soname,$(CSDP_SONAME)
+CSDP_SHLIB_LINKS = ln -sf $(CSDP_SHLIB) $(CSDP_SONAME) && \
+	ln -sf $(CSDP_SHLIB) $(CSDP_SHLIB_DEV)
+endif
 
 # Both of these are POSIX interfaces that Windows lacks: USESIGTERM needs
 # setrlimit(), and USEGETTIME needs gettimeofday().  Probe with -include

@@ -101,9 +101,15 @@ BLAS_LIBS       The BLAS and LAPACK libraries, plus any Fortran run time
 LIBS            Anything else to link against.  Additive; no default.
 OPENMP_CFLAGS   The flag that enables OpenMP.  Default: -fopenmp
 OPENMP_LIBS     The corresponding link flag.  Default: empty
+SHARED          Set to yes to build a shared library alongside libsdp.a.
+                The programs then link against it.  Default: no
 prefix          Installation prefix.  Default: /usr/local
 exec_prefix     Default: $(prefix)
 bindir          Where the programs are installed.  Default: $(exec_prefix)/bin
+libdir          Where the library is installed.  Default: $(exec_prefix)/lib
+includedir      Where the headers are installed, in a csdp subdirectory.
+                Default: $(prefix)/include
+pkgconfigdir    Where csdp.pc is installed.  Default: $(libdir)/pkgconfig
 DESTDIR         Staging directory prepended to the install paths.
 INSTALL         The install(1) program.  Default: install
 INSTALL_PROGRAM The command used to install the programs.
@@ -208,8 +214,15 @@ command
 
 > make install
 
-This will copy csdp, rand_graph, complement, theta, and graphtoprob
-into the /usr/local/bin directory.  If you use the C shell, remember
+This will copy csdp, rand_graph, complement, theta, and graphtoprob into
+the /usr/local/bin directory, libsdp.a into /usr/local/lib, the headers
+into /usr/local/include/csdp, and a pkg-config file into
+/usr/local/lib/pkgconfig.  With SHARED=yes the shared library is installed
+as well.  Code using CSDP can then be built with either
+
+> cc `pkg-config --cflags csdp` prog.c `pkg-config --libs csdp`
+
+and either #include <csdp/declarations.h> or #include "declarations.h".  If you use the C shell, remember
 to "rehash" so that the shell will know that these programs have been
 added to the /usr/local/bin directory.
 
