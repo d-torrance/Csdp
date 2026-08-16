@@ -22,6 +22,7 @@ all: theta1.out g50.out
 #
 export LD_LIBRARY_PATH := ../lib
 export DYLD_LIBRARY_PATH := ../lib
+export PATH := ../lib:$(PATH)
 
 #
 # Test the solver on theta1.dat-s

@@ -52,9 +52,14 @@ install: all csdp.pc
 	$(INSTALL) -d "$(DESTDIR)$(libdir)"
 	$(INSTALL_DATA) lib/libsdp.a "$(DESTDIR)$(libdir)/libsdp.a"
 ifeq ($(SHARED),yes)
+ifeq ($(CSDP_IMPLIB),)
 	$(INSTALL_PROGRAM) lib/$(CSDP_SHLIB) "$(DESTDIR)$(libdir)/$(CSDP_SHLIB)"
 	ln -sf $(CSDP_SHLIB) "$(DESTDIR)$(libdir)/$(CSDP_SONAME)"
 	ln -sf $(CSDP_SHLIB) "$(DESTDIR)$(libdir)/$(CSDP_SHLIB_DEV)"
+else
+	$(INSTALL_PROGRAM) lib/$(CSDP_SHLIB) "$(DESTDIR)$(bindir)/$(CSDP_SHLIB)"
+	$(INSTALL_DATA) lib/$(CSDP_IMPLIB) "$(DESTDIR)$(libdir)/$(CSDP_IMPLIB)"
+endif
 endif
 	$(INSTALL) -d "$(DESTDIR)$(includedir)/csdp"
 	for h in include/*.h; do \
