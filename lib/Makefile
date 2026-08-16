@@ -26,4 +26,4 @@ $(CSDP_SHLIB): $(OBJS)
 clean:
 	rm -f *.o
 	rm -f libsdp.a
-	rm -f libsdp.so* libsdp*.dylib
+	rm -f libsdp.so* libsdp*.dylib libsdp*.dll libsdp.dll.a
