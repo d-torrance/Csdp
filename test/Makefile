@@ -21,6 +21,7 @@ all: theta1.out g50.out
 # other line.
 #
 export LD_LIBRARY_PATH := ../lib
+export DYLD_LIBRARY_PATH := ../lib
 
 #
 # Test the solver on theta1.dat-s
