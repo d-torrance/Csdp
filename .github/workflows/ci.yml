@@ -196,6 +196,30 @@ jobs:
           make install DESTDIR="$PWD/stage" prefix=/usr TOOL_PREFIX=csdp-
           ls -l stage/usr/bin
 
+      # The -dynamiclib/-install_name path only exists on Darwin, so it has to
+      # be exercised here or not at all.
+      - name: Shared library
+        if: matrix.openmp == 'libomp'
+        run: |
+          LIBOMP=$(brew --prefix libomp)
+          make clean
+          make -j$(sysctl -n hw.ncpu) SHARED=yes \
+            CFLAGS="-O2 -g -Wall $STRICT" \
+            OPENMP_CFLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include" \
+            OPENMP_LIBS="-L$LIBOMP/lib -lomp" \
+            BLAS_LIBS="-framework Accelerate"
+          test -f lib/libsdp.0.0.0.dylib
+          test -L lib/libsdp.0.dylib
+          test "$(readlink lib/libsdp.0.dylib)" = libsdp.0.0.0.dylib
+          test "$(readlink lib/libsdp.dylib)" = libsdp.0.0.0.dylib
+          otool -D lib/libsdp.0.0.0.dylib
+          otool -L solver/csdp | grep -q 'libsdp\.0\.dylib' \
+            || { echo "csdp not linked against the shared library"; exit 1; }
+          make unitTest SHARED=yes
+          ./.github/check-results.sh
+          make install SHARED=yes DESTDIR="$PWD/dstage" prefix=/usr
+          find dstage -name 'libsdp*'
+
   shared:
     # Patch 0003: SHARED=yes must build a real shared library, link the
     # programs against it, install it with its symlinks, and produce a
