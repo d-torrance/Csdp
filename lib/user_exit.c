@@ -3,6 +3,7 @@
  * 0, so that psd will not stop.
  */
 
+#include <stdio.h>
 #include "declarations.h"
 
 
