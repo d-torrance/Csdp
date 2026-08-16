@@ -1,0 +1,398 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Turn every warning we care about into an error, so that a regression in
+  # any of these shows up as a red check rather than as scrollback.
+  STRICT: -Werror=implicit-function-declaration -Werror=incompatible-pointer-types -Werror=int-conversion
+
+jobs:
+  ubuntu:
+    name: ${{ matrix.cc }} / ${{ matrix.blas }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc-12, gcc-13, gcc-14, clang-16, clang-17, clang-18]
+        blas: [reference]
+        include:
+          - cc: gcc-14
+            blas: openblas
+          - cc: clang-18
+            blas: openblas
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          cc='${{ matrix.cc }}'
+          pkgs="make $cc"
+          # clang ships -fopenmp but not omp.h; that lives in libomp-N-dev.
+          case "$cc" in
+            clang-*) pkgs="$pkgs libomp-${cc#clang-}-dev" ;;
+          esac
+          if [ '${{ matrix.blas }}' = openblas ]; then
+            pkgs="$pkgs libopenblas-dev"
+          else
+            pkgs="$pkgs libblas-dev liblapack-dev"
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $pkgs
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.blas }}" = openblas ]; then
+            BLAS_LIBS="-lopenblas"
+          else
+            BLAS_LIBS="-llapack -lblas"
+          fi
+          make -j$(nproc) CC=${{ matrix.cc }} CFLAGS="-O2 -g -Wall $STRICT" \
+            BLAS_LIBS="$BLAS_LIBS"
+
+      - name: Test
+        run: |
+          make unitTest
+          ./.github/check-results.sh
+
+      - name: Install
+        run: |
+          make install DESTDIR="$PWD/stage" prefix=/usr TOOL_PREFIX=csdp-
+          ls -l stage/usr/bin
+          for f in csdp csdp-theta csdp-complement csdp-graphtoprob \
+                   csdp-rand_graph; do
+            test -x "stage/usr/bin/$f" || { echo "missing $f"; exit 1; }
+          done
+
+  containers:
+    # Run these through "docker run" rather than a job-level container so
+    # that actions/checkout does not have to work inside musl and rawhide
+    # images.
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gcc 15 (C23 default)
+            image: gcc:15
+            setup: apt-get update && apt-get install -y --no-install-recommends make libblas-dev liblapack-dev
+            ldlibs: -llapack -lblas
+          - name: debian sid
+            image: debian:sid
+            setup: apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev make libblas-dev liblapack-dev
+            ldlibs: -llapack -lblas
+          - name: fedora rawhide / flexiblas
+            image: fedora:rawhide
+            setup: dnf -y --setopt=install_weak_deps=False install gcc make flexiblas-devel
+            ldlibs: -lflexiblas
+          - name: alpine / musl
+            image: alpine:latest
+            setup: apk add --no-cache build-base openblas-dev
+            ldlibs: -lopenblas
+          # 32 bit: BIT64 must stay undefined here, or read_prob() loses the
+          # check that rejects problems too large for 32 bit indexing.
+          - name: i386 / 32 bit
+            image: i386/debian:sid
+            setup: apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev make libblas-dev liblapack-dev
+            ldlibs: -llapack -lblas
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build and test
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src -e STRICT="$STRICT" \
+            ${{ matrix.image }} sh -euxc '
+              ${{ matrix.setup }}
+              gcc --version | head -1
+              make -j$(nproc) CC=gcc CFLAGS="-O2 -g -Wall $STRICT" \
+                BLAS_LIBS="${{ matrix.ldlibs }}"
+              make unitTest
+              ./.github/check-results.sh
+              make install DESTDIR=/tmp/stage prefix=/usr TOOL_PREFIX=csdp-
+              ls -l /tmp/stage/usr/bin
+            '
+
+  windows:
+    name: windows / mingw64
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-openblas
+
+      - name: Build
+        run: |
+          out=$(make -Bn -C lib)
+          flags=$(echo "$out" | grep -oE '\-D[A-Z0-9]+' | sort -u | tr '\n' ' ')
+          echo "feature macros: $flags"
+          for unwanted in -DBIT64 -DUSESIGTERM; do
+            case "$flags" in
+              *"$unwanted"*) echo "$unwanted must not be set on Windows"; exit 1 ;;
+            esac
+          done
+          make -j$(nproc) CFLAGS="-O2 -g -Wall $STRICT" BLAS_LIBS="-lopenblas"
+
+      - name: Test
+        run: |
+          make unitTest
+          ./.github/check-results.sh
+
+      - name: Install
+        run: |
+          make install DESTDIR="$PWD/stage" prefix=/usr TOOL_PREFIX=csdp-
+          ls -l stage/usr/bin
+
+      # Windows has no sonames and no symlinks: the artifacts are a versioned
+      # DLL next to the programs and an import library in libdir.
+      - name: Shared library
+        run: |
+          make clean
+          make -j$(nproc) SHARED=yes CFLAGS="-O2 -g -Wall $STRICT" \
+            BLAS_LIBS="-lopenblas"
+          test -f lib/libsdp-0.dll
+          test -f lib/libsdp.dll.a
+          if ls lib/libsdp.so* 2>/dev/null; then
+            echo "built ELF names on Windows"; exit 1
+          fi
+          objdump -f lib/libsdp-0.dll | grep -i 'file format'
+          make unitTest SHARED=yes
+          ./.github/check-results.sh
+          make install SHARED=yes DESTDIR="$PWD/dstage" prefix=/usr
+          test -f dstage/usr/bin/libsdp-0.dll
+          test -f dstage/usr/lib/libsdp.dll.a
+
+  macos:
+    name: ${{ matrix.os }} / ${{ matrix.openmp }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+        openmp: [libomp, none]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install libomp
+        if: matrix.openmp == 'libomp'
+        run: brew install libomp
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.openmp }}" = libomp ]; then
+            LIBOMP=$(brew --prefix libomp)
+            OPENMP_CFLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include"
+            OPENMP_LIBS="-L$LIBOMP/lib -lomp"
+          else
+            OPENMP_CFLAGS=
+            OPENMP_LIBS=
+          fi
+          make -j$(sysctl -n hw.ncpu) \
+            CFLAGS="-O2 -g -Wall $STRICT" \
+            OPENMP_CFLAGS="$OPENMP_CFLAGS" OPENMP_LIBS="$OPENMP_LIBS" \
+            BLAS_LIBS="-framework Accelerate"
+
+      - name: Test
+        run: |
+          make unitTest
+          ./.github/check-results.sh
+
+      - name: Install
+        run: |
+          make install DESTDIR="$PWD/stage" prefix=/usr TOOL_PREFIX=csdp-
+          ls -l stage/usr/bin
+
+      # The -dynamiclib/-install_name path only exists on Darwin, so it has to
+      # be exercised here or not at all.
+      - name: Shared library
+        if: matrix.openmp == 'libomp'
+        run: |
+          LIBOMP=$(brew --prefix libomp)
+          make clean
+          make -j$(sysctl -n hw.ncpu) SHARED=yes \
+            CFLAGS="-O2 -g -Wall $STRICT" \
+            OPENMP_CFLAGS="-Xpreprocessor -fopenmp -I$LIBOMP/include" \
+            OPENMP_LIBS="-L$LIBOMP/lib -lomp" \
+            BLAS_LIBS="-framework Accelerate"
+          test -f lib/libsdp.0.0.0.dylib
+          test -L lib/libsdp.0.dylib
+          test "$(readlink lib/libsdp.0.dylib)" = libsdp.0.0.0.dylib
+          test "$(readlink lib/libsdp.dylib)" = libsdp.0.0.0.dylib
+          otool -D lib/libsdp.0.0.0.dylib
+          otool -L solver/csdp | grep -q 'libsdp\.0\.dylib' \
+            || { echo "csdp not linked against the shared library"; exit 1; }
+          make unitTest SHARED=yes
+          ./.github/check-results.sh
+          make install SHARED=yes DESTDIR="$PWD/dstage" prefix=/usr
+          find dstage -name 'libsdp*'
+
+  shared:
+    # SHARED=yes must build a real shared library, link the programs against
+    # it, install it with its symlinks, and produce a pkg-config file that a
+    # third party can actually build against.
+    name: shared library
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            make gcc pkg-config libblas-dev liblapack-dev
+
+      - name: Build and test with SHARED=yes
+        run: |
+          make -j$(nproc) SHARED=yes CFLAGS="-O2 -g -Wall $STRICT"
+          test -f lib/libsdp.so.0.0.0
+          test -L lib/libsdp.so.0
+          test -L lib/libsdp.so
+          # libtool's shape: both symlinks point at the real file, not at
+          # each other, so removing one cannot break the other.
+          test "$(readlink lib/libsdp.so.0)" = libsdp.so.0.0.0
+          test "$(readlink lib/libsdp.so)" = libsdp.so.0.0.0
+          readelf -d lib/libsdp.so.0.0.0 | grep -q 'SONAME.*libsdp\.so\.0'
+          ldd solver/csdp | grep -q 'libsdp\.so\.0' \
+            || { echo "csdp is not linked against the shared library"; exit 1; }
+          make unitTest SHARED=yes
+          ./.github/check-results.sh
+
+      - name: Install and consume via pkg-config
+        run: |
+          make install SHARED=yes DESTDIR="$PWD/stage" prefix=/usr
+          find stage -name 'libsdp*' | sort
+          test -f stage/usr/include/csdp/declarations.h
+          export PKG_CONFIG_PATH="$PWD/stage/usr/lib/pkgconfig"
+          export PKG_CONFIG_SYSROOT_DIR="$PWD/stage"
+          pkg-config --modversion csdp
+          # both include spellings have to work
+          for inc in '<csdp/declarations.h>' '"declarations.h"'; do
+            printf '#include %s\nint main(void){return 0;}\n' "$inc" > t.c
+            cc t.c $(pkg-config --cflags csdp) $(pkg-config --libs csdp) \
+               $(pkg-config --libs --static csdp) -o t
+            LD_LIBRARY_PATH="$PWD/stage/usr/lib" ./t
+          done
+
+      - name: A static-only build installs no shared library
+        run: |
+          make clean
+          make -j$(nproc)
+          make install DESTDIR="$PWD/st" prefix=/usr
+          test -f st/usr/lib/libsdp.a
+          if ls st/usr/lib/libsdp.so* 2>/dev/null; then
+            echo "shared library installed without SHARED=yes"; exit 1
+          fi
+
+  flags:
+    # The point of the Makefile rework is that packagers can set CFLAGS,
+    # CPPFLAGS, LDFLAGS and LIBS without losing the flags the build itself
+    # requires, and without having to smuggle them in through CC.  Assert it.
+    name: flag handling
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            make gcc libblas-dev liblapack-dev
+
+      # -B so that these assertions do not pass vacuously once something
+      # in the tree has already been built.
+      - name: CFLAGS on the command line does not drop the build's own flags
+        run: |
+          out=$(make -Bn -C lib CFLAGS="-O0 -g")
+          for flag in '-O0 -g' '-I../include' '-DBIT64' '-std=gnu99'; do
+            if ! echo "$out" | grep -q -- "$flag"; then
+              echo "missing $flag"; echo "$out"; exit 1
+            fi
+          done
+
+      - name: CFLAGS in the environment is honored
+        run: |
+          out=$(CFLAGS="-O0 -g" make -Bn -C lib)
+          for flag in '-O0 -g' '-I../include'; do
+            if ! echo "$out" | grep -q -- "$flag"; then
+              echo "missing $flag"; echo "$out"; exit 1
+            fi
+          done
+
+      - name: CPPFLAGS is honored
+        run: |
+          make -Bn -C lib CPPFLAGS=-DFROM_PACKAGER | grep -q -- '-DFROM_PACKAGER'
+
+      - name: LDFLAGS reaches the link line
+        run: |
+          make -Bn -C solver LDFLAGS=-Wl,-z,relro,-z,now \
+            | grep -- '-o csdp$' | grep -q -- '-Wl,-z,relro,-z,now'
+
+      - name: OPENMP_CFLAGS= disables OpenMP entirely
+        run: |
+          out=$(make -Bn -C lib OPENMP_CFLAGS=)
+          for flag in '-fopenmp' '-DUSEOPENMP' '-DSETNUMTHREADS'; do
+            if echo "$out" | grep -q -- "$flag"; then
+              echo "unexpected $flag"; echo "$out"; exit 1
+            fi
+          done
+
+      # The feature probes have to see the same flags as the build, or a
+      # packager who selects the target with CFLAGS rather than CC gets
+      # -DBIT64 on a 32 bit build, which silently removes an overflow check.
+      - name: Feature probes follow CFLAGS, not just CC
+        run: |
+          for sel in 'CFLAGS=-m32' 'CC=gcc -m32'; do
+            if make -Bn -C lib "$sel" | grep -q -- '-DBIT64'; then
+              echo "BIT64 wrongly set for 32 bit via $sel"; exit 1
+            fi
+          done
+          make -Bn -C lib | grep -q -- '-DBIT64' \
+            || { echo "BIT64 missing on a 64 bit build"; exit 1; }
+
+      - name: CSDP's own library survives a LIBS override
+        run: |
+          out=$(make -Bn -C solver LIBS=-lFROMLIBS | grep -- '-o csdp$')
+          for flag in -lsdp -lFROMLIBS; do
+            case "$out" in *"$flag"*) ;; *) echo "missing $flag: $out"; exit 1 ;; esac
+          done
+
+      # FreeBSD's bsd.port.mk exports LIBS="" unconditionally, which must not
+      # be able to knock out the BLAS default.
+      - name: An empty LIBS in the environment still links
+        run: |
+          make clean >/dev/null
+          LIBS= make -j4 >/dev/null
+          LIBS= make unitTest >/dev/null
+          ./.github/check-results.sh
+
+      - name: install does not race under -j
+        run: |
+          make clean >/dev/null
+          make -j8 all install DESTDIR="$PWD/race" prefix=/usr >/dev/null
+          test -x race/usr/bin/csdp
+
+      - name: Parallel build from clean works
+        run: |
+          make clean >/dev/null
+          make -j8
+          make unitTest
+          ./.github/check-results.sh
+
+      - name: make install works with the INSTALL file present
+        run: |
+          test -f INSTALL
+          make install DESTDIR="$PWD/stage" prefix=/usr
+          test -x stage/usr/bin/csdp
