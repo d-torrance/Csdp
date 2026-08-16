@@ -296,6 +296,20 @@ jobs:
             echo "shared library installed without SHARED=yes"; exit 1
           fi
 
+  patches:
+    # patches/0002-*.patch is a second rendering of the commit that introduces
+    # Makefile.inc, so its body goes stale whenever that commit is amended.
+    # This has already happened twice.  Needs full history, since the script
+    # finds the commit by subject.
+    name: patch drift
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - run: ./patches/regenerate.sh --check
+
   flags:
     # The point of the Makefile rework is that packagers can set CFLAGS,
     # CPPFLAGS, LDFLAGS and LIBS without losing the flags the build itself
